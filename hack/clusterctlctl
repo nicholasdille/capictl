@@ -1,10 +1,6 @@
 #!/bin/bash
 set -o errexit -o pipefail
 
-if ! type kind >/dev/null 2>&1; then
-    echo "ERROR: kind not found"
-    exit 1
-fi
 if ! type clusterctl >/dev/null 2>&1; then
     echo "ERROR: clusterctl not found"
     exit 1
@@ -13,210 +9,246 @@ if ! type kubectl >/dev/null 2>&1; then
     echo "ERROR: kubectl not found"
     exit 1
 fi
-
-# TODO: Check for GITHUB_TOKEN?
-# TODO: Check for GitHub rate limit
-
-PROVIDER=hetzner
-case "${PROVIDER}" in
-    hetzner)
-            # TODO: Test for required variables in ~/.cluster-api/clusterctl.yaml
-            # TODO: Variables: HCLOUD_CONTROL_PLANE_MACHINE_TYPE, HCLOUD_REGION, HCLOUD_SSH_KEY, HCLOUD_WORKER_MACHINE_TYPE, KUBERNETES_VERSION
-            export HCLOUD_TOKEN="$(pp hcloud)"
-            export HCLOUD_REGION=fsn1
-            export HCLOUD_SSH_KEY=default
-            export HCLOUD_CONTROL_PLANE_MACHINE_TYPE=cx21
-            export HCLOUD_WORKER_MACHINE_TYPE=cx21
-            export KUBERNETES_VERSION=1.27.4
-            :
-            ;;
-    *)
-            echo "Unknown provider: ${PROVIDER}"
-            exit 1
-            ;;
-esac
-
-if kind get clusters | grep -q kind; then
-    echo "### Bootstrap cluster already exists"
-
-else
-    echo "### Creaking bootstrap cluster"
-    kind create cluster \
-        --config bootstrap.yaml \
-        --wait 5m
+if ! type jq >/dev/null 2>&1; then
+    echo "ERROR: jq not found"
+    exit 1
 fi
-kind get kubeconfig >kubeconfig
-export KUBECONFIG=kubeconfig
+
+BOOTSTRAP_PROVIDER=k3d
+WORKLOAD_PROVIDER=hetzner
+CLUSTER_NAME=foo
+CONTROL_PLANE_COUNT=1
+WORKER_COUNT=2
+BOOTSTRAP_CLUSTER_NAME="capi-bootstrap-${CLUSTER_NAME}"
+KUBERNETES_VERSION="1.27.3"
+if ! test -f "bootstrap/${BOOTSTRAP_PROVIDER}.sh"; then
+    echo "ERROR: Bootstrap provider ${BOOTSTRAP_PROVIDER} not found"
+    exit 1
+fi
+if ! test -f "provider/${WORKLOAD_PROVIDER}.sh"; then
+    echo "ERROR: Workload provider ${WORKLOAD_PROVIDER} not found"
+    exit 1
+fi
+source "bootstrap/${BOOTSTRAP_PROVIDER}.sh"
+source "provider/${WORKLOAD_PROVIDER}.sh"
+
+if ! bootstrap_precheck; then
+    echo "ERROR: Bootstrap provider precheck failed"
+    exit 1
+fi
+if ! workload_precheck; then
+    echo "ERROR: Workload provider precheck failed"
+    exit 1
+fi
+
+function github_get_rate_limit() {
+    if test -n "${GITHUB_TOKEN}"; then
+        GITHUB_TOKEN_HEADER="Authorization: token ${GITHUB_TOKEN}"
+    fi
+    curl \
+        --silent \
+        --location \
+        ${GITHUB_TOKEN_HEADER} \
+        --url https://api.github.com/rate_limit \
+    | jq --raw-output '.rate.remaining'
+}
+
+if test "$(github_get_rate_limit)" -lt 10; then
+    echo "ERROR: GitHub rate limit too low"
+    exit 1
+fi
+
+bootstrap_create "${BOOTSTRAP_CLUSTER_NAME}"
+bootstrap_kubeconfig "${BOOTSTRAP_CLUSTER_NAME}"
+if ! test -f "kubeconfig-bootstrap"; then
+    echo "ERROR: kubeconfig-bootstrap not found"
+    bootstrap_delete "${BOOTSTRAP_CLUSTER_NAME}"
+    exit 1
+fi
+export KUBECONFIG="kubeconfig-bootstrap"
 
 echo "### Installing provider"
-clusterctl init --infrastructure "${PROVIDER}" --wait-providers
-while kubectl get pods -A | tail -n +2 | grep -vq Running; do
-    echo "Waiting for all pods to be running..."
+clusterctl init \
+    --infrastructure "${WORKLOAD_PROVIDER}" \
+    --wait-providers
+while kubectl get pods -A | tail -n +2 | grep -vq "Running"; do
+    echo "### Waiting for all pods to be running..."
     sleep 10
 done
 
-echo "### Generating cluster configuration"
-clusterctl generate cluster foo --control-plane-machine-count=1 --worker-machine-count=3 >cluster.yaml
+if ! clusterctl describe cluster ${CLUSTER_NAME} >/dev/null 2>&1; then
+    echo "### Generating cluster configuration"
+    if test -z "${KUBERNETES_VERSION}"; then
+        KUBERNETES_VERSION="$(
+            kubectl version --output json \
+            | jq --raw-output '.clientVersion.gitVersion'
+        )"
+    fi
+    if test -n "${PROVIDER_TEMPLATE_FLAVOR}"; then
+        PROVIDER_TEMPLATE_FLAVOR_PARAMETER="--flavor ${PROVIDER_TEMPLATE_FLAVOR}"
+    fi
+    clusterctl generate cluster "${CLUSTER_NAME}" \
+        --kubernetes-version="${KUBERNETES_VERSION}" \
+        ${PROVIDER_TEMPLATE_FLAVOR_PARAMETER} \
+        --control-plane-machine-count="${CONTROL_PLANE_COUNT}" \
+        --worker-machine-count="${WORKER_COUNT}" \
+        >cluster.yaml
+    workload_post_generate_hook
 
-echo "### Rolling out workload cluster"
-kubectl create secret generic hetzner --from-literal="hcloud=${HCLOUD_TOKEN}"
-cat cluster.yaml \
-| envsubst \
-| kubectl apply -f -
+    echo "### Rolling out workload cluster"
+    workload_pre_apply_hook
+    cat cluster.yaml \
+    | kubectl apply -f -
+fi
+workload_post_apply_hook
 
+MAX_WAIT_SECONDS=$(( 30 * 60 ))
+SECONDS=0
+while test "${SECONDS}" -lt "${MAX_WAIT_SECONDS}"; do
+    echo "### Waiting for control plane of workload cluster to be ready"
+    clusterctl describe cluster ${CLUSTER_NAME}
+    control_plane_initialized="$(
+        kubectl get cluster ${CLUSTER_NAME} --output json | \
+            jq --raw-output '.status.conditions[] | select(.type == "ControlPlaneInitialized") | .status'
+    )"
+    if test "${control_plane_initialized}" == "True"; then
+        kubectl describe cluster ${CLUSTER_NAME}
+        kubectl describe KubeadmControlPlane
+        echo "### Control plane initialized"
+        break
+    fi
+    sleep 60
+done
+if test "${control_plane_initialized}" == "False"; then
+    echo "### Control plane failed to initialize"
+    exit 1
+fi
 
+echo "### Getting kubeconfig for workload cluster ${CLUSTER_NAME}"
+clusterctl get kubeconfig ${CLUSTER_NAME} >kubeconfig-${CLUSTER_NAME}
 
+echo "### Deploy CNI plugin"
+if ! type cilium >/dev/null 2>&1; then
+    curl -L --remote-name-all https://github.com/cilium/cilium-cli/releases/latest/download/cilium-linux-amd64.tar.gz{,.sha256sum}
+    sha256sum --check cilium-linux-amd64.tar.gz.sha256sum
+    tar -xvzf cilium-linux-amd64.tar.gz -C /usr/local/bin
+fi
+CONTROL_PLANE_ENDPOINT_HOST="$(
+    kubectl --kubeconfig=kubeconfig-${CLUSTER_NAME} config view --output json \
+    | jq --raw-output '.clusters[] | select(.name == "foo") | .cluster.server' \
+    | cut -d: -f2 \
+    | tr -d '/'
+)"
+CONTROL_PLANE_ENDPOINT_PORT="$(
+    kubectl --kubeconfig=kubeconfig-${CLUSTER_NAME} config view --output json \
+    | jq --raw-output '.clusters[] | select(.name == "foo") | .cluster.server' \
+    | cut -d: -f3
+)"
+helm repo add cilium https://helm.cilium.io
+helm repo update
+KUBECONFIG=kubeconfig-${CLUSTER_NAME} helm install \
+    --namespace kube-system \
+    cilium cilium/cilium \
+        --set cluster.id=0 \
+        --set cluster.name=${CLUSTER_NAME} \
+        --set encryption.nodeEncryption=false \
+        --set extraConfig.ipam=kubernetes \
+        --set extraConfig.kubeProxyReplacement=strict \
+        --set k8sServiceHost=${CONTROL_PLANE_ENDPOINT_HOST} \
+        --set k8sServicePort=${CONTROL_PLANE_ENDPOINT_PORT} \
+        --set kubeProxyReplacement=strict \
+        --set operator.replicas=1 \
+        --set serviceAccounts.cilium.name=cilium \
+        --set serviceAccounts.operator.name=cilium-operator \
+        --set tunnel=vxlan \
+        --set prometheus.enabled=true \
+        --set hubble.relay.enabled=true \
+        --set hubble.ui.enabled=true \
+        --set hubble.metrics.enabled="{dns,drop,tcp,flow,icmp,http}" \
+        --wait --timeout 5m
+KUBECONFIG=kubeconfig-${CLUSTER_NAME} cilium status
 
+MAX_WAIT_SECONDS=$(( 30 * 60 ))
+SECONDS=0
+while test "${SECONDS}" -lt "${MAX_WAIT_SECONDS}"; do
+    echo "### Waiting for control plane of workload cluster to be ready"
+    clusterctl describe cluster ${CLUSTER_NAME}
+    control_plane_ready="$(
+        kubectl get cluster ${CLUSTER_NAME} --output json | \
+            jq --raw-output '.status.conditions[] | select(.type == "ControlPlaneReady") | .status'
+    )"
+    if test "${control_plane_ready}" == "True"; then
+        kubectl describe cluster ${CLUSTER_NAME}
+        kubectl describe KubeadmControlPlane
+        echo "### Control plane initialized"
+        break
+    fi
+    sleep 60
+done
+if test "${control_plane_ready}" == "False"; then
+    echo "### Control plane failed to initialize"
+    exit 1
+fi
 
-#- |
-#    MAX_WAIT_SECONDS=$(( 30 * 60 ))
-#    SECONDS=0
-#    while test "${SECONDS}" -lt "${MAX_WAIT_SECONDS}"; do
-#        echo "### Waiting for control plane of workload cluster to be ready"
-#        clusterctl describe cluster ${K8S_CLUSTER}
-#
-#        control_plane_initialized="$(
-#            kubectl get cluster ${K8S_CLUSTER} --output json | \
-#                jq --raw-output '.status.conditions[] | select(.type == "ControlPlaneInitialized") | .status'
-#        )"
-#        if test "${control_plane_initialized}" == "True"; then
-#            kubectl describe cluster ${K8S_CLUSTER}
-#            kubectl describe KubeadmControlPlane
-#            echo "### Control plane initialized"
-#            break
-#        fi
-#
-#        sleep 60
-#    done
-#    if test "${control_plane_initialized}" == "False"; then
-#        echo "### Control plane failed to initialize"
-#        exit 1
-#    fi
-#  - |
-#    echo "### Getting kubeconfig for workload cluster"
-#    clusterctl get kubeconfig ${K8S_CLUSTER} >kubeconfig-${K8S_CLUSTER}
-#  - |
-#    echo "### Deploy CNI plugin"
-#    curl -L --remote-name-all https://github.com/cilium/cilium-cli/releases/latest/download/cilium-linux-amd64.tar.gz{,.sha256sum}
-#    sha256sum --check cilium-linux-amd64.tar.gz.sha256sum
-#    tar xvzf cilium-linux-amd64.tar.gz -C /usr/local/bin
-#    helm repo add cilium https://helm.cilium.io
-#    helm repo update
-#    KUBECONFIG=kubeconfig-${K8S_CLUSTER} helm install \
-#        --namespace kube-system \
-#        cilium cilium/cilium \
-#            --set cluster.id=0 \
-#            --set cluster.name=${K8S_CLUSTER} \
-#            --set encryption.nodeEncryption=false \
-#            --set extraConfig.ipam=kubernetes \
-#            --set extraConfig.kubeProxyReplacement=strict \
-#            --set k8sServiceHost=${CONTROL_PLANE_ENDPOINT_IP} \
-#            --set k8sServicePort=6443 \
-#            --set kubeProxyReplacement=strict \
-#            --set operator.replicas=1 \
-#            --set serviceAccounts.cilium.name=cilium \
-#            --set serviceAccounts.operator.name=cilium-operator \
-#            --set tunnel=vxlan \
-#            --set prometheus.enabled=true \
-#            --set prometheus.serviceMonitor.enabled=true \
-#            --set operator.prometheus.enabled=true \
-#            --set operator.prometheus.serviceMonitor.enabled=true \
-#            --set hubble.relay.enabled=true \
-#            --set hubble.ui.enabled=true \
-#            --set hubble.metrics.enabled="{dns,drop,tcp,flow,icmp,http}" \
-#            --set hubble.metrics.serviceMonitor.enabled=true \
-#            --set hubble.relay.prometheus.serviceMonitor.enabled=true \
-#            --wait --timeout 5m
-#    KUBECONFIG=kubeconfig-${K8S_CLUSTER} cilium status
-#  - |
-#    MAX_WAIT_SECONDS=$(( 30 * 60 ))
-#    SECONDS=0
-#    while test "${SECONDS}" -lt "${MAX_WAIT_SECONDS}"; do
-#        echo "### Waiting for control plane of workload cluster to be ready"
-#        clusterctl describe cluster ${K8S_CLUSTER}
-#
-#        control_plane_ready="$(
-#            kubectl get cluster ${K8S_CLUSTER} --output json | \
-#                jq --raw-output '.status.conditions[] | select(.type == "ControlPlaneReady") | .status'
-#        )"
-#        if test "${control_plane_ready}" == "True"; then
-#            kubectl describe cluster ${K8S_CLUSTER}
-#            kubectl describe KubeadmControlPlane
-#            echo "### Control plane initialized"
-#            break
-#        fi
-#
-#        sleep 60
-#    done
-#    if test "${control_plane_ready}" == "False"; then
-#        echo "### Control plane failed to initialize"
-#        exit 1
-#    fi
-#  - |
-#    MAX_WAIT_SECONDS=$(( 30 * 60 ))
-#    SECONDS=0
-#    while test "${SECONDS}" -lt "${MAX_WAIT_SECONDS}"; do
-#        echo "### Waiting for workers of workload cluster to be ready"
-#        clusterctl describe cluster ${K8S_CLUSTER}
-#
-#        worker_ready="$(
-#            kubectl get machinedeployment ${K8S_CLUSTER}-md-0 --output json | \
-#                jq --raw-output '.status.conditions[] | select(.type == "Ready") | .status'
-#        )"
-#        if test "${worker_ready}" == "True"; then
-#            echo "### Worker ready"
-#            break
-#        fi
-#
-#        sleep 60
-#    done
-#    if test "${worker_ready}" == "False"; then
-#        echo "### Workers failed to initialize"
-#        kubectl describe machinedeployment ${K8S_CLUSTER}-md-0
-#        exit 1
-#    fi
-#  - |
-#    MAX_WAIT_SECONDS=$(( 30 * 60 ))
-#    SECONDS=0
-#    while test "${SECONDS}" -lt "${MAX_WAIT_SECONDS}"; do
-#        echo "### Waiting for nodes to be ready..."
-#        sleep 5
-#
-#        if ! kubectl --kubeconfig kubeconfig-${K8S_CLUSTER} get nodes --output jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.conditions[?(@.reason=="KubeletReady")].status}{"\n"}{end}' | grep -qE "\sFalse$"; then
-#            echo "### All nodes are ready"
-#            break
-#        fi
-#    done
-#    if kubectl --kubeconfig kubeconfig-${K8S_CLUSTER} get nodes --output jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.conditions[?(@.reason=="KubeletReady")].status}{"\n"}{end}' | grep -qE "\sFalse$"; then
-#        kubectl --kubeconfig kubeconfig-${K8S_CLUSTER} describe nodes
-#        kubectl --kubeconfig kubeconfig-${K8S_CLUSTER} get pods -A
-#        echo "### Nodes are not ready"
-#        exit 1
-#    fi
-#    echo "### Nodes are ready"
-#  - |
-#    kubectl --kubeconfig kubeconfig-${K8S_CLUSTER} --namespace kube-system get pods --selector k8s-app=cilium --output name | \
-#        xargs -I{} kubectl --kubeconfig kubeconfig-${K8S_CLUSTER} --namespace kube-system exec -i {} --container cilium-agent -- cilium-health status
-#  - |
-#    echo "### Initialize CAPV in workload cluster"
-#    clusterctl init --kubeconfig kubeconfig-${K8S_CLUSTER} --infrastructure vsphere --wait-provider-timeout 600 --v 5
-#    echo "### Waiting for management resources to be running"
-#    MAX_WAIT_SECONDS=$(( 30 * 60 ))
-#    SECONDS=0
-#    while test "${SECONDS}" -lt "${MAX_WAIT_SECONDS}"; do
-#        echo "Waiting for all pods to be running..."
-#
-#        if ! kubectl --kubeconfig kubeconfig-${K8S_CLUSTER} get pods -A | tail -n +2 | grep -vq Running; then
-#            echo "### All pods are ready"
-#            break
-#        fi
-#
-#        sleep 10
-#    done
-#    if kubectl --kubeconfig kubeconfig-${K8S_CLUSTER} get pods -A | tail -n +2 | grep -vq Running; then
-#        echo "### Pods are not ready"
-#        exit 1
-#    fi
-#    echo "### Pods are ready"
-#    echo "### Move management resources to workload cluster"
-#    clusterctl move --to-kubeconfig kubeconfig-${K8S_CLUSTER}
+MAX_WAIT_SECONDS=$(( 30 * 60 ))
+SECONDS=0
+while test "${SECONDS}" -lt "${MAX_WAIT_SECONDS}"; do
+    echo "### Waiting for workers of workload cluster to be ready"
+    clusterctl describe cluster ${CLUSTER_NAME}
+    worker_ready="$(
+        kubectl get machinedeployment ${CLUSTER_NAME}-md-0 --output json | \
+            jq --raw-output '.status.conditions[] | select(.type == "Ready") | .status'
+    )"
+    if test "${worker_ready}" == "True"; then
+        echo "### Worker ready"
+        break
+    fi
+    sleep 60
+done
+if test "${worker_ready}" == "False"; then
+    echo "### Workers failed to initialize"
+    kubectl describe machinedeployment ${CLUSTER_NAME}-md-0
+    exit 1
+fi
+
+MAX_WAIT_SECONDS=$(( 30 * 60 ))
+SECONDS=0
+while test "${SECONDS}" -lt "${MAX_WAIT_SECONDS}"; do
+    echo "### Waiting for nodes to be ready..."
+    sleep 5
+    if ! kubectl --kubeconfig kubeconfig-${CLUSTER_NAME} get nodes --output jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.conditions[?(@.reason=="KubeletReady")].status}{"\n"}{end}' | grep -qE "\sFalse$"; then
+        echo "### All nodes are ready"
+        break
+    fi
+done
+if kubectl --kubeconfig kubeconfig-${CLUSTER_NAME} get nodes --output jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.conditions[?(@.reason=="KubeletReady")].status}{"\n"}{end}' | grep -qE "\sFalse$"; then
+    kubectl --kubeconfig kubeconfig-${CLUSTER_NAME} describe nodes
+    kubectl --kubeconfig kubeconfig-${CLUSTER_NAME} get pods -A
+    echo "### Nodes are not ready"
+    exit 1
+fi
+echo "### Nodes are ready"
+
+kubectl --kubeconfig kubeconfig-${CLUSTER_NAME} --namespace kube-system get pods --selector k8s-app=cilium --output name | \
+    xargs -I{} kubectl --kubeconfig kubeconfig-${CLUSTER_NAME} --namespace kube-system exec -i {} --container cilium-agent -- cilium-health status
+
+echo "### Initialize CAPV in workload cluster"
+clusterctl init --kubeconfig kubeconfig-${CLUSTER_NAME} --infrastructure vsphere --wait-provider-timeout 600 --v 5
+echo "### Waiting for management resources to be running"
+MAX_WAIT_SECONDS=$(( 30 * 60 ))
+SECONDS=0
+while test "${SECONDS}" -lt "${MAX_WAIT_SECONDS}"; do
+    echo "### Waiting for all pods to be running..."
+    if ! kubectl --kubeconfig kubeconfig-${CLUSTER_NAME} get pods -A | tail -n +2 | grep -vq Running; then
+        echo "### All pods are ready"
+        break
+    fi
+    sleep 10
+done
+if kubectl --kubeconfig kubeconfig-${CLUSTER_NAME} get pods -A | tail -n +2 | grep -vq Running; then
+    echo "### Pods are not ready"
+    exit 1
+fi
+echo "### Pods are ready"
+echo "### Move management resources to workload cluster"
+clusterctl move --to-kubeconfig kubeconfig-${CLUSTER_NAME}
