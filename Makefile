@@ -49,7 +49,7 @@ cover: coverage.out
 	@echo ""
 	@$(GO) tool cover -func ./coverage.out
 
-snapshot: make/go.mk $(GO_SOURCES) ; $(info $(M) Building snapshot of docker-setup with version $(GO_VERSION)...)
+snapshot: $(GO_SOURCES) ; $(info $(M) Building snapshot of docker-setup with version $(GO_VERSION)...)
 	@docker buildx bake binary --set binary.args.version=$(GO_VERSION)-dev
 
 release: ; $(info $(M) Building docker-setup...)

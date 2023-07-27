@@ -65,7 +65,7 @@ FROM scratch AS unit-test-coverage
 COPY --from=unit-test /out/cover.out /cover.out
 
 FROM scratch AS bin-unix
-COPY --from=build /out/uniget /
+COPY --from=build /out/clusterctlctl /
 
 FROM bin-unix AS bin-linux
 FROM bin-unix AS bin-darwin
