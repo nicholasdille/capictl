@@ -1,0 +1,5 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+networking:
+  podSubnet: "10.42.128.0/17"
+  serviceSubnet: "10.42.0.0/18"
