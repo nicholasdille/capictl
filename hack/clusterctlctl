@@ -15,7 +15,7 @@ if ! type jq >/dev/null 2>&1; then
 fi
 
 BOOTSTRAP_PROVIDER=k3d
-WORKLOAD_PROVIDER=vsphere
+WORKLOAD_PROVIDER=hetzner
 CNI_PROVIDER=cilium
 CLUSTER_NAME=foo
 CONTROL_PLANE_COUNT=1
@@ -100,14 +100,14 @@ if ! clusterctl describe cluster ${CLUSTER_NAME} >/dev/null 2>&1; then
         --control-plane-machine-count="${CONTROL_PLANE_COUNT}" \
         --worker-machine-count="${WORKER_COUNT}" \
         >cluster.yaml
-    workload_post_generate_hook
+    workload_post_generate_hook "${CLUSTER_NAME}"
 
     echo "### Rolling out workload cluster"
-    workload_pre_apply_hook
+    workload_pre_apply_hook "${CLUSTER_NAME}"
     cat cluster.yaml \
     | kubectl apply -f -
 fi
-workload_post_apply_hook
+workload_post_apply_hook "${CLUSTER_NAME}"
 
 # Wait for control plane to be initialized
 MAX_WAIT_SECONDS=$(( 30 * 60 ))
@@ -140,7 +140,7 @@ if ! cni_precheck; then
     echo "ERROR: CNI provider precheck failed"
     exit 1
 fi
-cni_deploy
+cni_deploy "${CLUSTER_NAME}"
 
 # Wait for control plane to be ready
 MAX_WAIT_SECONDS=$(( 30 * 60 ))

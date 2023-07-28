@@ -13,9 +13,19 @@ export CLUSTER_TOPOLOGY=true
 export PROVIDER_TEMPLATE_FLAVOR=development
 
 function workload_post_generate_hook() {
+    local name=$1
+
     true
 }
 
-function workload_pre_create_hook() {
+function workload_pre_apply_hook() {
+    local name=$1
+
+    true
+}
+
+function workload_post_apply_hook() {
+    local name=$1
+
     true
 }

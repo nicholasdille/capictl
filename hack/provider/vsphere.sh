@@ -38,7 +38,9 @@ function workload_post_generate_hook() {
 }
 
 function workload_pre_apply_hook() {
-    kubectl patch configmap coredns \
+    local name=$1
+
+    KUBECONFIG="kubeconfig-${name}" kubectl patch configmap coredns \
         --kubeconfig=kubeconfig-bootstrap \
         --namespace=kube-system \
         --patch-file=Corefile
@@ -47,5 +49,7 @@ function workload_pre_apply_hook() {
 }
 
 function workload_post_apply_hook() {
+    local name=$1
+
     true
 }
