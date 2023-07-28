@@ -16,6 +16,7 @@ function bootstrap_create() {
         k3d cluster create "${name}" \
             --k3s-arg "--disable=traefik@server:*" \
             --k3s-arg "--disable=servicelb@server:*" \
+            --k3s-arg "--disable=metrics-server@server:*" \
             --volume "/var/run/docker.sock:/var/run/docker.sock" \
             --wait --timeout 5m
     fi

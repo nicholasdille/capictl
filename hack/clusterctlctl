@@ -15,7 +15,8 @@ if ! type jq >/dev/null 2>&1; then
 fi
 
 BOOTSTRAP_PROVIDER=k3d
-WORKLOAD_PROVIDER=hetzner
+WORKLOAD_PROVIDER=vsphere
+CNI_PROVIDER=cilium
 CLUSTER_NAME=foo
 CONTROL_PLANE_COUNT=1
 WORKER_COUNT=2
@@ -29,8 +30,13 @@ if ! test -f "provider/${WORKLOAD_PROVIDER}.sh"; then
     echo "ERROR: Workload provider ${WORKLOAD_PROVIDER} not found"
     exit 1
 fi
+if ! test -f "cni/${CNI_PROVIDER}.sh"; then
+    echo "ERROR: CNI provider ${CNI_PROVIDER} not found"
+    exit 1
+fi
 source "bootstrap/${BOOTSTRAP_PROVIDER}.sh"
 source "provider/${WORKLOAD_PROVIDER}.sh"
+source "cni/${CNI_PROVIDER}.sh"
 
 if ! bootstrap_precheck; then
     echo "ERROR: Bootstrap provider precheck failed"
@@ -43,7 +49,7 @@ fi
 
 function github_get_rate_limit() {
     if test -n "${GITHUB_TOKEN}"; then
-        GITHUB_TOKEN_HEADER="Authorization: token ${GITHUB_TOKEN}"
+        GITHUB_TOKEN_HEADER="--header \"Authorization: token ${GITHUB_TOKEN}\""
     fi
     curl \
         --silent \
@@ -53,8 +59,9 @@ function github_get_rate_limit() {
     | jq --raw-output '.rate.remaining'
 }
 
-if test "$(github_get_rate_limit)" -lt 10; then
-    echo "ERROR: GitHub rate limit too low"
+GH_RATE_LIMIT_LEFT="$(github_get_rate_limit)"
+if test "${GH_RATE_LIMIT_LEFT}" -lt 10; then
+    echo "ERROR: GitHub rate limit too low (${GH_RATE_LIMIT_LEFT} left)"
     exit 1
 fi
 
@@ -102,6 +109,7 @@ if ! clusterctl describe cluster ${CLUSTER_NAME} >/dev/null 2>&1; then
 fi
 workload_post_apply_hook
 
+# Wait for control plane to be initialized
 MAX_WAIT_SECONDS=$(( 30 * 60 ))
 SECONDS=0
 while test "${SECONDS}" -lt "${MAX_WAIT_SECONDS}"; do
@@ -128,46 +136,13 @@ echo "### Getting kubeconfig for workload cluster ${CLUSTER_NAME}"
 clusterctl get kubeconfig ${CLUSTER_NAME} >kubeconfig-${CLUSTER_NAME}
 
 echo "### Deploy CNI plugin"
-if ! type cilium >/dev/null 2>&1; then
-    curl -L --remote-name-all https://github.com/cilium/cilium-cli/releases/latest/download/cilium-linux-amd64.tar.gz{,.sha256sum}
-    sha256sum --check cilium-linux-amd64.tar.gz.sha256sum
-    tar -xvzf cilium-linux-amd64.tar.gz -C /usr/local/bin
+if ! cni_precheck; then
+    echo "ERROR: CNI provider precheck failed"
+    exit 1
 fi
-CONTROL_PLANE_ENDPOINT_HOST="$(
-    kubectl --kubeconfig=kubeconfig-${CLUSTER_NAME} config view --output json \
-    | jq --raw-output '.clusters[] | select(.name == "foo") | .cluster.server' \
-    | cut -d: -f2 \
-    | tr -d '/'
-)"
-CONTROL_PLANE_ENDPOINT_PORT="$(
-    kubectl --kubeconfig=kubeconfig-${CLUSTER_NAME} config view --output json \
-    | jq --raw-output '.clusters[] | select(.name == "foo") | .cluster.server' \
-    | cut -d: -f3
-)"
-helm repo add cilium https://helm.cilium.io
-helm repo update
-KUBECONFIG=kubeconfig-${CLUSTER_NAME} helm install \
-    --namespace kube-system \
-    cilium cilium/cilium \
-        --set cluster.id=0 \
-        --set cluster.name=${CLUSTER_NAME} \
-        --set encryption.nodeEncryption=false \
-        --set extraConfig.ipam=kubernetes \
-        --set extraConfig.kubeProxyReplacement=strict \
-        --set k8sServiceHost=${CONTROL_PLANE_ENDPOINT_HOST} \
-        --set k8sServicePort=${CONTROL_PLANE_ENDPOINT_PORT} \
-        --set kubeProxyReplacement=strict \
-        --set operator.replicas=1 \
-        --set serviceAccounts.cilium.name=cilium \
-        --set serviceAccounts.operator.name=cilium-operator \
-        --set tunnel=vxlan \
-        --set prometheus.enabled=true \
-        --set hubble.relay.enabled=true \
-        --set hubble.ui.enabled=true \
-        --set hubble.metrics.enabled="{dns,drop,tcp,flow,icmp,http}" \
-        --wait --timeout 5m
-KUBECONFIG=kubeconfig-${CLUSTER_NAME} cilium status
+cni_deploy
 
+# Wait for control plane to be ready
 MAX_WAIT_SECONDS=$(( 30 * 60 ))
 SECONDS=0
 while test "${SECONDS}" -lt "${MAX_WAIT_SECONDS}"; do
@@ -190,6 +165,7 @@ if test "${control_plane_ready}" == "False"; then
     exit 1
 fi
 
+# Wait for workers to be ready
 MAX_WAIT_SECONDS=$(( 30 * 60 ))
 SECONDS=0
 while test "${SECONDS}" -lt "${MAX_WAIT_SECONDS}"; do
@@ -211,6 +187,7 @@ if test "${worker_ready}" == "False"; then
     exit 1
 fi
 
+# Wait for all nodes to be ready
 MAX_WAIT_SECONDS=$(( 30 * 60 ))
 SECONDS=0
 while test "${SECONDS}" -lt "${MAX_WAIT_SECONDS}"; do
@@ -229,9 +206,7 @@ if kubectl --kubeconfig kubeconfig-${CLUSTER_NAME} get nodes --output jsonpath='
 fi
 echo "### Nodes are ready"
 
-kubectl --kubeconfig kubeconfig-${CLUSTER_NAME} --namespace kube-system get pods --selector k8s-app=cilium --output name | \
-    xargs -I{} kubectl --kubeconfig kubeconfig-${CLUSTER_NAME} --namespace kube-system exec -i {} --container cilium-agent -- cilium-health status
-
+# Wait for all pods to be ready
 echo "### Initialize CAPV in workload cluster"
 clusterctl init --kubeconfig kubeconfig-${CLUSTER_NAME} --infrastructure vsphere --wait-provider-timeout 600 --v 5
 echo "### Waiting for management resources to be running"
