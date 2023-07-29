@@ -5,6 +5,7 @@ function usage() {
     echo "Usage: $0 [flags]"
     echo
     echo "    -n <name>               - The name of the cluster"
+    echo "    -v <version>            - The Kubernetes version to use"
     echo "    -b <bootstrap-provider> - Valid values for the bootstrap provider are 'kind', 'k3d'"
     echo "    -i <workload-provider>  - Valid values for the infrastructure provider are 'hetzner', 'vsphere', 'docker'"
     echo "    -p <cni-plugin>         - Valid values for the CNI plugin are 'cilium'"
@@ -17,6 +18,9 @@ while getopts ":b:p:c:" o; do
     case "${o}" in
         n)
             CLUSTER_NAME="${OPTARG}"
+            ;;
+        v)
+            KUBERNETES_VERSION="${OPTARG}"
             ;;
         b)
             BOOTSTRAP_PROVIDER="${OPTARG}"
@@ -86,6 +90,9 @@ if ! test -f "cni/${CNI_PROVIDER}.sh"; then
     exit 1
 fi
 source functions.sh
+if test -f .env; then
+    source .env
+fi
 source "bootstrap/${BOOTSTRAP_PROVIDER}.sh"
 source "provider/${WORKLOAD_PROVIDER}.sh"
 source "cni/${CNI_PROVIDER}.sh"

@@ -1,12 +1,25 @@
 function workload_precheck() {
-    true
+    if test -z "${HCLOUD_TOKEN}"; then
+        echo "ERROR: HCLOUD_TOKEN not set"
+        return 1
+    fi
+    if test -z "${HCLOUD_REGION}"; then
+        echo "ERROR: HCLOUD_REGION not set"
+        return 1
+    fi
+    if test -z "${HCLOUD_SSH_KEY}"; then
+        echo "ERROR: HCLOUD_SSH_KEY not set"
+        return 1
+    fi
+    if test -z "${HCLOUD_CONTROL_PLANE_MACHINE_TYPE}"; then
+        echo "ERROR: HCLOUD_CONTROL_PLANE_MACHINE_TYPE not set"
+        return 1
+    fi
+    if test -z "${HCLOUD_WORKER_MACHINE_TYPE}"; then
+        echo "ERROR: HCLOUD_WORKER_MACHINE_TYPE not set"
+        return 1
+    fi
 }
-
-export HCLOUD_TOKEN="$(pp hcloud)"
-export HCLOUD_REGION=fsn1
-export HCLOUD_SSH_KEY=default
-export HCLOUD_CONTROL_PLANE_MACHINE_TYPE=cx21
-export HCLOUD_WORKER_MACHINE_TYPE=cx21
 
 function workload_post_generate_hook() {
     local name=$1
