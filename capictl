@@ -1,6 +1,63 @@
 #!/bin/bash
 set -o errexit -o pipefail
 
+function usage() {
+    echo "Usage: $0 [flags]"
+    echo
+    echo "    -n <name>               - The name of the cluster"
+    echo "    -b <bootstrap-provider> - Valid values for the bootstrap provider are 'kind', 'k3d'"
+    echo "    -i <workload-provider>  - Valid values for the infrastructure provider are 'hetzner', 'vsphere', 'docker'"
+    echo "    -p <cni-plugin>         - Valid values for the CNI plugin are 'cilium'"
+    echo "    -c <count>              - The number of control plane nodes"
+    echo "    -w <count>              - The number of worker nodes"
+    exit 1
+}
+
+while getopts ":b:p:c:" o; do
+    case "${o}" in
+        n)
+            CLUSTER_NAME="${OPTARG}"
+            ;;
+        b)
+            BOOTSTRAP_PROVIDER="${OPTARG}"
+            #((s == 45 || s == 90)) || usage
+            ;;
+        i)
+            WORKLOAD_PROVIDER="${OPTARG}"
+            ;;
+        p)
+            CNI_PLUGIN="${OPTARG}"
+            ;;
+        c)
+            CONTROL_PLANE_COUNT="${OPTARG}"
+            ;;
+        w)
+            WORKER_COUNT="${OPTARG}"
+            ;;
+        *)
+            usage
+            ;;
+    esac
+done
+shift $((OPTIND-1))
+
+if test -z "${CLUSTER_NAME}" || test -z "${WORKLOAD_PROVIDER}"; then
+    usage
+fi
+
+if test -z "${BOOTSTRAP_PROVIDER}"; then
+    BOOTSTRAP_PROVIDER=kind
+fi
+if test -z "${CNI_PLUGIN}"; then
+    CNI_PLUGIN=cilium
+fi
+if test -z "${CONTROL_PLANE_COUNT}"; then
+    CONTROL_PLANE_COUNT=1
+fi
+if test -z "${WORKER_COUNT}"; then
+    WORKER_COUNT=2
+fi
+
 if ! type clusterctl >/dev/null 2>&1; then
     echo "ERROR: clusterctl not found"
     exit 1
@@ -14,12 +71,6 @@ if ! type jq >/dev/null 2>&1; then
     exit 1
 fi
 
-BOOTSTRAP_PROVIDER=k3d
-WORKLOAD_PROVIDER=hetzner
-CNI_PROVIDER=cilium
-CLUSTER_NAME=foo
-CONTROL_PLANE_COUNT=1
-WORKER_COUNT=2
 BOOTSTRAP_CLUSTER_NAME="capi-bootstrap-${CLUSTER_NAME}"
 KUBERNETES_VERSION="1.27.3"
 if ! test -f "bootstrap/${BOOTSTRAP_PROVIDER}.sh"; then
