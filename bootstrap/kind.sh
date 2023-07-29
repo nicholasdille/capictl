@@ -15,7 +15,7 @@ function bootstrap_create() {
         echo "### Creaking bootstrap cluster"
         kind create cluster \
             --name "${name}" \
-            --config bootstrap.yaml \
+            --config bootstrap/kind.yaml \
             --wait 5m
     fi
 }

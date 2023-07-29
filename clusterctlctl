@@ -1,0 +1,150 @@
+#!/bin/bash
+set -o errexit -o pipefail
+
+if ! type clusterctl >/dev/null 2>&1; then
+    echo "ERROR: clusterctl not found"
+    exit 1
+fi
+if ! type kubectl >/dev/null 2>&1; then
+    echo "ERROR: kubectl not found"
+    exit 1
+fi
+if ! type jq >/dev/null 2>&1; then
+    echo "ERROR: jq not found"
+    exit 1
+fi
+
+BOOTSTRAP_PROVIDER=k3d
+WORKLOAD_PROVIDER=hetzner
+CNI_PROVIDER=cilium
+CLUSTER_NAME=foo
+CONTROL_PLANE_COUNT=1
+WORKER_COUNT=2
+BOOTSTRAP_CLUSTER_NAME="capi-bootstrap-${CLUSTER_NAME}"
+KUBERNETES_VERSION="1.27.3"
+if ! test -f "bootstrap/${BOOTSTRAP_PROVIDER}.sh"; then
+    echo "ERROR: Bootstrap provider ${BOOTSTRAP_PROVIDER} not found"
+    exit 1
+fi
+if ! test -f "provider/${WORKLOAD_PROVIDER}.sh"; then
+    echo "ERROR: Workload provider ${WORKLOAD_PROVIDER} not found"
+    exit 1
+fi
+if ! test -f "cni/${CNI_PROVIDER}.sh"; then
+    echo "ERROR: CNI provider ${CNI_PROVIDER} not found"
+    exit 1
+fi
+source functions.sh
+source "bootstrap/${BOOTSTRAP_PROVIDER}.sh"
+source "provider/${WORKLOAD_PROVIDER}.sh"
+source "cni/${CNI_PROVIDER}.sh"
+
+if ! bootstrap_precheck; then
+    echo "ERROR: Bootstrap provider precheck failed"
+    exit 1
+fi
+if ! workload_precheck; then
+    echo "ERROR: Workload provider precheck failed"
+    exit 1
+fi
+
+function github_get_rate_limit() {
+    if test -n "${GITHUB_TOKEN}"; then
+        GITHUB_TOKEN_HEADER="--header \"Authorization: token ${GITHUB_TOKEN}\""
+    fi
+    curl \
+        --silent \
+        --location \
+        ${GITHUB_TOKEN_HEADER} \
+        --url https://api.github.com/rate_limit \
+    | jq --raw-output '.rate.remaining'
+}
+
+GH_RATE_LIMIT_LEFT="$(github_get_rate_limit)"
+if test "${GH_RATE_LIMIT_LEFT}" -lt 10; then
+    echo "ERROR: GitHub rate limit too low (${GH_RATE_LIMIT_LEFT} left)"
+    exit 1
+fi
+
+bootstrap_create "${BOOTSTRAP_CLUSTER_NAME}"
+bootstrap_kubeconfig "${BOOTSTRAP_CLUSTER_NAME}"
+if ! test -f "kubeconfig-bootstrap"; then
+    echo "ERROR: kubeconfig-bootstrap not found"
+    bootstrap_delete "${BOOTSTRAP_CLUSTER_NAME}"
+    exit 1
+fi
+export KUBECONFIG="kubeconfig-bootstrap"
+
+echo "### Installing provider"
+clusterctl init \
+    --infrastructure "${WORKLOAD_PROVIDER}" \
+    --wait-providers
+while kubectl get pods -A | tail -n +2 | grep -vq "Running"; do
+    echo "### Waiting for all pods to be running..."
+    sleep 10
+done
+
+if ! clusterctl describe cluster ${CLUSTER_NAME} >/dev/null 2>&1; then
+    echo "### Generating cluster configuration"
+    if test -z "${KUBERNETES_VERSION}"; then
+        KUBERNETES_VERSION="$(
+            kubectl version --output json \
+            | jq --raw-output '.clientVersion.gitVersion'
+        )"
+    fi
+    if test -n "${PROVIDER_TEMPLATE_FLAVOR}"; then
+        PROVIDER_TEMPLATE_FLAVOR_PARAMETER="--flavor ${PROVIDER_TEMPLATE_FLAVOR}"
+    fi
+    clusterctl generate cluster "${CLUSTER_NAME}" \
+        --kubernetes-version="${KUBERNETES_VERSION}" \
+        ${PROVIDER_TEMPLATE_FLAVOR_PARAMETER} \
+        --control-plane-machine-count="${CONTROL_PLANE_COUNT}" \
+        --worker-machine-count="${WORKER_COUNT}" \
+        >cluster.yaml
+    workload_post_generate_hook "${CLUSTER_NAME}"
+
+    echo "### Rolling out workload cluster"
+    workload_pre_apply_hook "${CLUSTER_NAME}"
+    cat cluster.yaml \
+    | kubectl apply -f -
+fi
+workload_post_apply_hook "${CLUSTER_NAME}"
+
+if ! wait_for_control_plane_initialized; then
+    echo "ERROR: Control plane failed to initialize"
+    exit 1
+fi
+
+echo "### Getting kubeconfig for workload cluster ${CLUSTER_NAME}"
+clusterctl get kubeconfig ${CLUSTER_NAME} >kubeconfig-${CLUSTER_NAME}
+
+echo "### Deploy CNI plugin"
+if ! cni_precheck; then
+    echo "ERROR: CNI provider precheck failed"
+    exit 1
+fi
+cni_deploy "${CLUSTER_NAME}"
+
+if ! wait_for_control_plane_ready; then
+    echo "ERROR: Control plane failed to become ready"
+    exit 1
+fi
+
+if ! wait_for_workers_ready; then
+    echo "ERROR: Workers failed to become ready"
+    exit 1
+fi
+
+if ! wait_for_nodes_ready; then
+    echo "ERROR: Nodes failed to become ready"
+    exit 1
+fi
+echo "### Nodes are ready"
+
+if ! wait_for_pods_ready; then
+    echo "ERROR: Pods failed to become ready"
+    exit 1
+fi
+echo "### Pods are ready"
+echo "### Move management resources to workload cluster"
+clusterctl move --to-kubeconfig kubeconfig-${CLUSTER_NAME}
