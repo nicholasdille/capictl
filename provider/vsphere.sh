@@ -1,37 +1,49 @@
+REQUIRED_PROVIDER_VARIABLES=(
+    VSPHERE_USERNAME
+    VSPHERE_PASSWORD
+    VSPHERE_SERVER
+    VSPHERE_DATACENTER
+    VSPHERE_DATASTORE
+    VSPHERE_NETWORK
+    VSPHERE_RESOURCE_POOL
+    VSPHERE_FOLDER
+    VSPHERE_TEMPLATE
+    VSPHERE_STORAGE_POLICY
+    CONTROL_PLANE_ENDPOINT_IP
+    VSPHERE_TLS_THUMBPRINT
+    VSPHERE_SSH_AUTHORIZED_KEY
+    EXP_CLUSTER_RESOURCE_SET
+    CPI_IMAGE_K8S_VERSION
+)
+
 function workload_precheck() {
     if ! type govc >/dev/null 2>&1; then
         echo "ERROR: govc not found"
         exit 1
     fi
+    for VAR_NAME in ${REQUIRED_PROVIDER_VARIABLES[@]}; do
+        if [[ -z "${!VAR_NAME}" ]]; then
+            echo "ERROR: The following variables are required:"
+            echo
+            echo "export VSPHERE_SERVER=''             # XXX"
+            echo "export VSPHERE_TLS_THUMBPRINT=''     # XXX"
+            echo "export VSPHERE_USERNAME=''           # XXX"
+            echo "export VSPHERE_PASSWORD=''           # XXX"
+            echo "export VSPHERE_DATACENTER=''         # XXX"
+            echo "export VSPHERE_DATASTORE=''          # XXX"
+            echo "export VSPHERE_NETWORK=''            # XXX"
+            echo "export VSPHERE_RESOURCE_POOL=''      # XXX"
+            echo "export VSPHERE_FOLDER=''             # XXX"
+            echo "export VSPHERE_TEMPLATE=''           # XXX"
+            echo "export VSPHERE_STORAGE_POLICY=''     # XXX"
+            echo "export VSPHERE_SSH_AUTHORIZED_KEY='' # XXX"
+            echo "export CONTROL_PLANE_ENDPOINT_IP=''  # XXX"
+            echo "export EXP_CLUSTER_RESOURCE_SET=''   # XXX"
+            echo "export CPI_IMAGE_K8S_VERSION=''      # XXX"
+            exit 1
+        fi
+    done
 }
-
-export POD_CIDR="10.42.128.0/17"
-export SERVICE_CIDR="10.42.0.0/18"
-
-if test -z "${VSPHERE_USERNAME}"; then
-    VSPHERE_USERNAME="$(ph vcenter-username)"
-fi
-export VSPHERE_USERNAME
-
-if test -z "${VSPHERE_PASSWORD}"; then
-    VSPHERE_PASSWORD="$(ph vcenter-password)"
-fi
-export VSPHERE_PASSWORD
-
-export VSPHERE_SERVER=""
-export VSPHERE_DATACENTER=""
-export VSPHERE_DATASTORE=""
-export VSPHERE_NETWORK=""
-export VSPHERE_RESOURCE_POOL=""
-export VSPHERE_FOLDER=""
-export VSPHERE_TEMPLATE=""
-export VSPHERE_STORAGE_POLICY=""
-export CONTROL_PLANE_ENDPOINT_IP=""
-#export VIP_NETWORK_INTERFACE=""
-export VSPHERE_TLS_THUMBPRINT=""
-export VSPHERE_SSH_AUTHORIZED_KEY=""
-export EXP_CLUSTER_RESOURCE_SET="true"
-export CPI_IMAGE_K8S_VERSION="v1.27.0"
 
 function workload_post_generate_hook() {
     true
@@ -43,7 +55,7 @@ function workload_pre_apply_hook() {
     KUBECONFIG="kubeconfig-${name}" kubectl patch configmap coredns \
         --kubeconfig=kubeconfig-bootstrap \
         --namespace=kube-system \
-        --patch-file=Corefile
+        --patch-file=vsphere-Corefile
     # TODO: Test DNS
     # TODO: Fix CSI configuration
 }

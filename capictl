@@ -9,12 +9,14 @@ function usage() {
     echo "    -b <bootstrap-provider> - Valid values for the bootstrap provider are 'kind', 'k3d'"
     echo "    -i <workload-provider>  - Valid values for the infrastructure provider are 'hetzner', 'vsphere', 'docker'"
     echo "    -p <cni-plugin>         - Valid values for the CNI plugin are 'cilium'"
+    echo "    -x <cidr>               - The pod CIDR to use"
+    echo "    -y <cidr>               - The service CIDR to use"
     echo "    -c <count>              - The number of control plane nodes"
     echo "    -w <count>              - The number of worker nodes"
     exit 1
 }
 
-while getopts ":b:p:c:" o; do
+while getopts "n:v:b:i:p:c:w:" o; do
     case "${o}" in
         n)
             CLUSTER_NAME="${OPTARG}"
@@ -32,6 +34,12 @@ while getopts ":b:p:c:" o; do
         p)
             CNI_PLUGIN="${OPTARG}"
             ;;
+        x)
+            POD_CIDR="${OPTARG}"
+            ;;
+        y)
+            SERVICE_CIDR="${OPTARG}"
+            ;;
         c)
             CONTROL_PLANE_COUNT="${OPTARG}"
             ;;
@@ -39,6 +47,7 @@ while getopts ":b:p:c:" o; do
             WORKER_COUNT="${OPTARG}"
             ;;
         *)
+            echo "ERROR: Unknown option ${o}"
             usage
             ;;
     esac
@@ -75,8 +84,15 @@ if ! type jq >/dev/null 2>&1; then
     exit 1
 fi
 
+if test -z "${KUBERNETES_VERSION}"; then
+    KUBERNETES_VERSION="$(
+        kubectl version --client --output json \
+        | jq --raw-output ".clientVersion.gitVersion" \
+        | tr -d v
+    )"
+fi
+
 BOOTSTRAP_CLUSTER_NAME="capi-bootstrap-${CLUSTER_NAME}"
-KUBERNETES_VERSION="1.27.3"
 if ! test -f "bootstrap/${BOOTSTRAP_PROVIDER}.sh"; then
     echo "ERROR: Bootstrap provider ${BOOTSTRAP_PROVIDER} not found"
     exit 1
@@ -85,8 +101,8 @@ if ! test -f "provider/${WORKLOAD_PROVIDER}.sh"; then
     echo "ERROR: Workload provider ${WORKLOAD_PROVIDER} not found"
     exit 1
 fi
-if ! test -f "cni/${CNI_PROVIDER}.sh"; then
-    echo "ERROR: CNI provider ${CNI_PROVIDER} not found"
+if ! test -f "cni/${CNI_PLUGIN}.sh"; then
+    echo "ERROR: CNI provider ${CNI_PLUGIN} not found"
     exit 1
 fi
 source functions.sh
@@ -95,7 +111,7 @@ if test -f .env; then
 fi
 source "bootstrap/${BOOTSTRAP_PROVIDER}.sh"
 source "provider/${WORKLOAD_PROVIDER}.sh"
-source "cni/${CNI_PROVIDER}.sh"
+source "cni/${CNI_PLUGIN}.sh"
 
 if ! bootstrap_precheck; then
     echo "ERROR: Bootstrap provider precheck failed"

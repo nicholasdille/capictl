@@ -1,24 +1,24 @@
+REQUIRED_PROVIDER_VARIABLES=(
+    HCLOUD_TOKEN
+    HCLOUD_REGION
+    HCLOUD_SSH_KEY
+    HCLOUD_CONTROL_PLANE_MACHINE_TYPE
+    HCLOUD_WORKER_MACHINE_TYPE
+)
+
 function workload_precheck() {
-    if test -z "${HCLOUD_TOKEN}"; then
-        echo "ERROR: HCLOUD_TOKEN not set"
-        return 1
-    fi
-    if test -z "${HCLOUD_REGION}"; then
-        echo "ERROR: HCLOUD_REGION not set"
-        return 1
-    fi
-    if test -z "${HCLOUD_SSH_KEY}"; then
-        echo "ERROR: HCLOUD_SSH_KEY not set"
-        return 1
-    fi
-    if test -z "${HCLOUD_CONTROL_PLANE_MACHINE_TYPE}"; then
-        echo "ERROR: HCLOUD_CONTROL_PLANE_MACHINE_TYPE not set"
-        return 1
-    fi
-    if test -z "${HCLOUD_WORKER_MACHINE_TYPE}"; then
-        echo "ERROR: HCLOUD_WORKER_MACHINE_TYPE not set"
-        return 1
-    fi
+    for VAR_NAME in ${REQUIRED_PROVIDER_VARIABLES[@]}; do
+        if [[ -z "${!VAR_NAME}" ]]; then
+            echo "ERROR: The following variables are required:"
+            echo
+            echo "export HCLOUD_TOKEN=''                      # XXX"
+            echo "export HCLOUD_REGION=''                     # XXX"
+            echo "export HCLOUD_SSH_KEY=''                    # XXX"
+            echo "export HCLOUD_CONTROL_PLANE_MACHINE_TYPE='' # XXX"
+            echo "export HCLOUD_WORKER_MACHINE_TYPE=''        # XXX"
+            exit 1
+        fi
+    done
 }
 
 function workload_post_generate_hook() {
