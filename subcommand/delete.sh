@@ -1,0 +1,1 @@
+# TODO: Call bootstrap_delete <name>

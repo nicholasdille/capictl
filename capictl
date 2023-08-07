@@ -124,12 +124,13 @@ fi
 
 function github_get_rate_limit() {
     if test -n "${GITHUB_TOKEN}"; then
-        GITHUB_TOKEN_HEADER="--header \"Authorization: token ${GITHUB_TOKEN}\""
+        GITHUB_TOKEN_AUTH="Authorization: token ${GITHUB_TOKEN}"
     fi
     curl \
         --silent \
         --location \
-        ${GITHUB_TOKEN_HEADER} \
+        --fail \
+        --header "${GITHUB_TOKEN_AUTH}" \
         --url https://api.github.com/rate_limit \
     | jq --raw-output '.rate.remaining'
 }
@@ -148,6 +149,13 @@ if ! test -f "kubeconfig-bootstrap"; then
     exit 1
 fi
 export KUBECONFIG="kubeconfig-bootstrap"
+if ! bootstrap_post_create_hook; then
+    echo "ERROR: Failed to execute post create hook."
+    bootstrap_delete "${BOOTSTRAP_CLUSTER_NAME}"
+    exit 1
+fi
+
+KUBECONFIG=kubeconfig-bootstrap kubectl --namespace kube-system get configmap coredns -o yaml | grep forward
 
 echo "### Installing provider"
 clusterctl init \
@@ -157,6 +165,8 @@ while kubectl get pods -A | tail -n +2 | grep -vq "Running"; do
     echo "### Waiting for all pods to be running..."
     sleep 10
 done
+
+KUBECONFIG=kubeconfig-bootstrap kubectl --namespace kube-system get configmap coredns -o yaml | grep forward
 
 if ! clusterctl describe cluster ${CLUSTER_NAME} >/dev/null 2>&1; then
     echo "### Generating cluster configuration"
@@ -184,6 +194,8 @@ if ! clusterctl describe cluster ${CLUSTER_NAME} >/dev/null 2>&1; then
 fi
 workload_post_apply_hook "${CLUSTER_NAME}"
 
+KUBECONFIG=kubeconfig-bootstrap kubectl --namespace kube-system get configmap coredns -o yaml | grep forward
+
 if ! wait_for_control_plane_initialized; then
     echo "ERROR: Control plane failed to initialize"
     exit 1
@@ -192,6 +204,10 @@ fi
 echo "### Getting kubeconfig for workload cluster ${CLUSTER_NAME}"
 clusterctl get kubeconfig ${CLUSTER_NAME} >kubeconfig-${CLUSTER_NAME}
 
+workload_control_plane_initialized_hook "${CLUSTER_NAME}"
+
+KUBECONFIG=kubeconfig-bootstrap kubectl --namespace kube-system get configmap coredns -o yaml | grep forward
+
 echo "### Deploy CNI plugin"
 if ! cni_precheck; then
     echo "ERROR: CNI provider precheck failed"
@@ -199,21 +215,29 @@ if ! cni_precheck; then
 fi
 cni_deploy "${CLUSTER_NAME}"
 
+KUBECONFIG=kubeconfig-bootstrap kubectl --namespace kube-system get configmap coredns -o yaml | grep forward
+
 if ! wait_for_control_plane_ready; then
     echo "ERROR: Control plane failed to become ready"
     exit 1
 fi
+
+KUBECONFIG=kubeconfig-bootstrap kubectl --namespace kube-system get configmap coredns -o yaml | grep forward
 
 if ! wait_for_workers_ready; then
     echo "ERROR: Workers failed to become ready"
     exit 1
 fi
 
+KUBECONFIG=kubeconfig-bootstrap kubectl --namespace kube-system get configmap coredns -o yaml | grep forward
+
 if ! wait_for_nodes_ready; then
     echo "ERROR: Nodes failed to become ready"
     exit 1
 fi
 echo "### Nodes are ready"
+
+KUBECONFIG=kubeconfig-bootstrap kubectl --namespace kube-system get configmap coredns -o yaml | grep forward
 
 if ! wait_for_pods_ready; then
     echo "ERROR: Pods failed to become ready"

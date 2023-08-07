@@ -3,6 +3,14 @@ function bootstrap_precheck() {
         echo "ERROR: kind not found. Required by bootstrap provider."
         return 1
     fi
+    if ! type docker >/dev/null 2>&1; then
+        echo "ERROR: docker not found"
+        exit 1
+    fi
+    if ! docker version >/dev/null 2>&1; then
+        echo "ERROR: Docker daemon not working or accessible"
+        exit 1
+    fi
 }
 
 function bootstrap_create() {
@@ -18,6 +26,12 @@ function bootstrap_create() {
             --config bootstrap/kind.yaml \
             --wait 5m
     fi
+}
+
+function bootstrap_delete() {
+    local name=$1
+    
+    kind delete cluster --name "${name}"
 }
 
 function bootstrap_kubeconfig() {

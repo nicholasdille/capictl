@@ -30,14 +30,20 @@ function workload_post_generate_hook() {
 function workload_pre_apply_hook() {
     local name=$1
 
-    KUBECONFIG="kubeconfig-${name}" kubectl create secret generic hetzner \
+    kubectl create secret generic hetzner \
         --from-literal="hcloud=${HCLOUD_TOKEN}"
-    KUBECONFIG="kubeconfig-${name}" kubectl create secret generic hcloud \
+    kubectl create secret generic hcloud \
         --namespace=kube-system \
         --from-literal="token=${HCLOUD_TOKEN}"
 }
 
 function workload_post_apply_hook() {
+    local name=$1
+
+    true
+}
+
+function workload_control_plane_initialized_hook() {
     local name=$1
 
     helm repo add hcloud https://charts.hetzner.cloud
