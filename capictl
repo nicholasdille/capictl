@@ -1,6 +1,11 @@
 #!/bin/bash
 set -o errexit -o pipefail
 
+# TODO: Make delay configurable
+DELAY_IN_SECONDS=60
+# TODO: Make timeout configurable
+TIMEOUT_IN_MINUTES=30
+
 function usage() {
     echo "Usage: $0 [flags]"
     echo
@@ -233,5 +238,7 @@ if ! wait_for_pods_ready; then
     exit 1
 fi
 echo "### Pods are ready"
+
 echo "### Move management resources to workload cluster"
 clusterctl move --to-kubeconfig kubeconfig-${CLUSTER_NAME}
+# TODO: Check for succesful move

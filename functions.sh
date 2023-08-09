@@ -21,7 +21,7 @@ function bootstrap_patch_coredns() {
 }
 
 function wait_for_control_plane_ready() {
-    MAX_WAIT_SECONDS=$(( 30 * 60 ))
+    MAX_WAIT_SECONDS=$(( TIMEOUT_IN_MINUTES * DELAY_IN_SECONDS ))
     SECONDS=0
     while test "${SECONDS}" -lt "${MAX_WAIT_SECONDS}"; do
         echo "### Waiting for control plane of workload cluster to be ready"
@@ -45,7 +45,7 @@ function wait_for_control_plane_ready() {
 }
 
 function wait_for_control_plane_initialized() {
-    MAX_WAIT_SECONDS=$(( 30 * 60 ))
+    MAX_WAIT_SECONDS=$(( TIMEOUT_IN_MINUTES * DELAY_IN_SECONDS ))
     SECONDS=0
     while test "${SECONDS}" -lt "${MAX_WAIT_SECONDS}"; do
         echo "### Waiting for control plane of workload cluster to be ready"
@@ -69,7 +69,7 @@ function wait_for_control_plane_initialized() {
 }
 
 function wait_for_workers_ready() {
-    MAX_WAIT_SECONDS=$(( 30 * 60 ))
+    MAX_WAIT_SECONDS=$(( TIMEOUT_IN_MINUTES * DELAY_IN_SECONDS ))
     SECONDS=0
     while test "${SECONDS}" -lt "${MAX_WAIT_SECONDS}"; do
         echo "### Waiting for workers of workload cluster to be ready"
@@ -92,7 +92,7 @@ function wait_for_workers_ready() {
 }
 
 function wait_for_nodes_ready() {
-    MAX_WAIT_SECONDS=$(( 30 * 60 ))
+    MAX_WAIT_SECONDS=$(( TIMEOUT_IN_MINUTES * DELAY_IN_SECONDS ))
     SECONDS=0
     while test "${SECONDS}" -lt "${MAX_WAIT_SECONDS}"; do
         echo "### Waiting for nodes to be ready..."
@@ -114,7 +114,7 @@ function wait_for_pods_ready() {
     echo "### Initialize CAPV in workload cluster"
     clusterctl init --kubeconfig kubeconfig-${CLUSTER_NAME} --infrastructure vsphere --wait-provider-timeout 600 --v 5
     echo "### Waiting for management resources to be running"
-    MAX_WAIT_SECONDS=$(( 30 * 60 ))
+    MAX_WAIT_SECONDS=$(( TIMEOUT_IN_MINUTES * DELAY_IN_SECONDS ))
     SECONDS=0
     while test "${SECONDS}" -lt "${MAX_WAIT_SECONDS}"; do
         echo "### Waiting for all pods to be running..."

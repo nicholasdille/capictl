@@ -30,8 +30,11 @@ function workload_post_generate_hook() {
 function workload_pre_apply_hook() {
     local name=$1
 
+    # Required for CAPI provider (CAPH)
     kubectl create secret generic hetzner \
         --from-literal="hcloud=${HCLOUD_TOKEN}"
+
+    # TODO: Explain why this is necessary
     kubectl create secret generic hcloud \
         --namespace=kube-system \
         --from-literal="token=${HCLOUD_TOKEN}"
@@ -45,6 +48,11 @@ function workload_post_apply_hook() {
 
 function workload_control_plane_initialized_hook() {
     local name=$1
+
+    # Required for hcloud cloud controller manager
+    kubectl create secret generic hcloud \
+        --namespace=kube-system \
+        --from-literal="token=${HCLOUD_TOKEN}"
 
     helm repo add hcloud https://charts.hetzner.cloud
     helm repo update hcloud
