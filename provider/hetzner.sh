@@ -31,10 +31,12 @@ function workload_pre_apply_hook() {
     local name=$1
 
     # Required for CAPI provider (CAPH)
+    # TODO: Only create if not exists
     kubectl create secret generic hetzner \
         --from-literal="hcloud=${HCLOUD_TOKEN}"
 
     # TODO: Explain why this is necessary
+    # TODO: Only create if not exists
     kubectl create secret generic hcloud \
         --namespace=kube-system \
         --from-literal="token=${HCLOUD_TOKEN}"
@@ -50,6 +52,7 @@ function workload_control_plane_initialized_hook() {
     local name=$1
 
     # Required for hcloud cloud controller manager
+    # TODO: Only create if not exists
     kubectl create secret generic hcloud \
         --namespace=kube-system \
         --from-literal="token=${HCLOUD_TOKEN}"
