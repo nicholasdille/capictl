@@ -1,3 +1,25 @@
+function bootstrap_patch_coredns() {
+    NAMESERVERS="$(
+        grep nameserver /etc/resolv.conf \
+        | cut -d' ' -f2 \
+        | xargs echo
+    )"
+
+    cat Corefile.patch.yaml.envsubst \
+    | NAMESERVERS="${NAMESERVERS}" envsubst '$NAMESERVERS' \
+    >Corefile.patch.yaml
+    
+    if ! test -f Corefile.patch.yaml || ! test -s Corefile.patch.yaml; then
+        echo "ERROR: Error envsubsting Corefile.patch.yaml"
+        return 1
+    fi
+    
+    KUBECONFIG="kubeconfig-bootstrap" kubectl patch configmap coredns \
+        --kubeconfig=kubeconfig-bootstrap \
+        --namespace=kube-system \
+        --patch-file=Corefile.patch.yaml
+}
+
 function wait_for_control_plane_ready() {
     MAX_WAIT_SECONDS=$(( 30 * 60 ))
     SECONDS=0

@@ -1,3 +1,4 @@
 /.env
 /kubeconfig*
 /cluster.yaml
+/Corefile.patch.yaml

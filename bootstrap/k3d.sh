@@ -52,25 +52,9 @@ function bootstrap_delete() {
 }
 
 function bootstrap_post_create_hook() {
-    NAMESERVERS="$(
-        grep nameserver /etc/resolv.conf \
-        | cut -d' ' -f2 \
-        | xargs echo
-    )"
+    bootstrap_patch_coredns
+}
 
-    cat provider/Corefile.patch.yaml.envsubst \
-    | NAMESERVERS="${NAMESERVERS}" envsubst '$NAMESERVERS' \
-    >Corefile.patch.yaml
-    
-    if ! test -f Corefile.patch.yaml || ! test -s Corefile.patch.yaml; then
-        echo "ERROR: Error envsubsting Corefile.patch.yaml"
-        return 1
-    fi
-    
-    KUBECONFIG="kubeconfig-bootstrap" kubectl patch configmap coredns \
-        --kubeconfig=kubeconfig-bootstrap \
-        --namespace=kube-system \
-        --patch-file=Corefile.patch.yaml
-
-    KUBECONFIG=kubeconfig-bootstrap kubectl --namespace kube-system get configmap coredns -o yaml | grep forward
+function bootstrap_post_init_hook() {
+    bootstrap_patch_coredns
 }

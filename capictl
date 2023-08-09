@@ -155,18 +155,19 @@ if ! bootstrap_post_create_hook; then
     exit 1
 fi
 
-KUBECONFIG=kubeconfig-bootstrap kubectl --namespace kube-system get configmap coredns -o yaml | grep forward
-
 echo "### Installing provider"
 clusterctl init \
     --infrastructure "${WORKLOAD_PROVIDER}" \
     --wait-providers
+if ! bootstrap_post_init_hook; then
+    echo "ERROR: Failed to execute post init hook"
+    bootstrap_delete "${BOOTSTRAP_CLUSTER_NAME}"
+    exit 1
+fi
 while kubectl get pods -A | tail -n +2 | grep -vq "Running"; do
     echo "### Waiting for all pods to be running..."
     sleep 10
 done
-
-KUBECONFIG=kubeconfig-bootstrap kubectl --namespace kube-system get configmap coredns -o yaml | grep forward
 
 if ! clusterctl describe cluster ${CLUSTER_NAME} >/dev/null 2>&1; then
     echo "### Generating cluster configuration"
@@ -194,8 +195,6 @@ if ! clusterctl describe cluster ${CLUSTER_NAME} >/dev/null 2>&1; then
 fi
 workload_post_apply_hook "${CLUSTER_NAME}"
 
-KUBECONFIG=kubeconfig-bootstrap kubectl --namespace kube-system get configmap coredns -o yaml | grep forward
-
 if ! wait_for_control_plane_initialized; then
     echo "ERROR: Control plane failed to initialize"
     exit 1
@@ -206,8 +205,6 @@ clusterctl get kubeconfig ${CLUSTER_NAME} >kubeconfig-${CLUSTER_NAME}
 
 workload_control_plane_initialized_hook "${CLUSTER_NAME}"
 
-KUBECONFIG=kubeconfig-bootstrap kubectl --namespace kube-system get configmap coredns -o yaml | grep forward
-
 echo "### Deploy CNI plugin"
 if ! cni_precheck; then
     echo "ERROR: CNI provider precheck failed"
@@ -215,29 +212,21 @@ if ! cni_precheck; then
 fi
 cni_deploy "${CLUSTER_NAME}"
 
-KUBECONFIG=kubeconfig-bootstrap kubectl --namespace kube-system get configmap coredns -o yaml | grep forward
-
 if ! wait_for_control_plane_ready; then
     echo "ERROR: Control plane failed to become ready"
     exit 1
 fi
-
-KUBECONFIG=kubeconfig-bootstrap kubectl --namespace kube-system get configmap coredns -o yaml | grep forward
 
 if ! wait_for_workers_ready; then
     echo "ERROR: Workers failed to become ready"
     exit 1
 fi
 
-KUBECONFIG=kubeconfig-bootstrap kubectl --namespace kube-system get configmap coredns -o yaml | grep forward
-
 if ! wait_for_nodes_ready; then
     echo "ERROR: Nodes failed to become ready"
     exit 1
 fi
 echo "### Nodes are ready"
-
-KUBECONFIG=kubeconfig-bootstrap kubectl --namespace kube-system get configmap coredns -o yaml | grep forward
 
 if ! wait_for_pods_ready; then
     echo "ERROR: Pods failed to become ready"
