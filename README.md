@@ -74,10 +74,6 @@ The script relies on a number of binaries to work:
 
 Those prerequisites can be installed with [`uniget`](https://uniget.dev).
 
-## Configuration
-
-Call `capictl --help`
-
 ## Internals
 
 This is how the script works:
