@@ -60,3 +60,10 @@ function workload_post_apply_hook() {
 
     true
 }
+
+function workload_logs() {
+    local name=$1
+
+    kubectl --namespace capv-system logs deployment/capv-controller-manager \
+    >capv-controller-manager.log
+}

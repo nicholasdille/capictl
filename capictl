@@ -28,7 +28,7 @@ while getopts "n:v:b:i:p:c:w:" o; do
             BOOTSTRAP_CLUSTER_PROVIDER="${OPTARG}"
             ;;
         i)
-            WORKLOAD_PROVIDER="${OPTARG}"
+            INFRASTRUCTURE_PROVIDER="${OPTARG}"
             ;;
         p)
             CNI_PLUGIN="${OPTARG}"
@@ -95,14 +95,13 @@ if test -z "${KUBERNETES_VERSION}"; then
     )"
 fi
 
-
 BOOTSTRAP_CLUSTER_NAME="capi-bootstrap-${CLUSTER_NAME}"
 if ! test -f "bootstrap/${BOOTSTRAP_CLUSTER_PROVIDER}.sh"; then
     echo "ERROR: Bootstrap provider ${BOOTSTRAP_CLUSTER_PROVIDER} not found"
     exit 1
 fi
-if ! test -f "provider/${WORKLOAD_PROVIDER}.sh"; then
-    echo "ERROR: Workload provider ${WORKLOAD_PROVIDER} not found"
+if ! test -f "provider/${INFRASTRUCTURE_PROVIDER}.sh"; then
+    echo "ERROR: Workload provider ${INFRASTRUCTURE_PROVIDER} not found"
     exit 1
 fi
 if ! test -f "cni/${CNI_PLUGIN}.sh"; then
@@ -111,7 +110,7 @@ if ! test -f "cni/${CNI_PLUGIN}.sh"; then
 fi
 source functions.sh
 source "bootstrap/${BOOTSTRAP_CLUSTER_PROVIDER}.sh"
-source "provider/${WORKLOAD_PROVIDER}.sh"
+source "provider/${INFRASTRUCTURE_PROVIDER}.sh"
 source "cni/${CNI_PLUGIN}.sh"
 
 if ! bootstrap_precheck; then
@@ -163,7 +162,7 @@ fi
 
 echo "### Installing provider"
 clusterctl init \
-    --infrastructure "${WORKLOAD_PROVIDER}" \
+    --infrastructure "${INFRASTRUCTURE_PROVIDER}" \
     --bootstrap "${BOOTSTRAP_PROVIDER}" \
     --control-plane "${CONTROL_PLANE_PROVIDER}" \
     --wait-providers \

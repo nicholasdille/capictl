@@ -29,3 +29,10 @@ function workload_post_apply_hook() {
 
     true
 }
+
+function workload_logs() {
+    local name=$1
+
+    kubectl --namespace capd-system logs deployment/capd-controller-manager \
+    >capd-controller-manager.log
+}
