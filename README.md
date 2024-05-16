@@ -2,6 +2,8 @@
 
 This repository contains an opinionated script to create a Kubernetes cluster using the [Cluster API](https://cluster-api.sigs.k8s.io/) on a few infrastructure providers.
 
+🎉 **This is the successor of [`k8s-caph-talos`](https://github.com/nicholasdille/k8s-caph-talos).** 🎉
+
 After creating a local bootstrap cluster, the workload cluster is created. At the end of the rollout, the management services are moved into the workload cluster.
 
 The resulting cluster will be able to manage itself as well as create new clusters.
