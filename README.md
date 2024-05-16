@@ -79,12 +79,11 @@ Those prerequisites can be installed with [`uniget`](https://uniget.dev).
 This is how the script works:
 
 1. Create a bootstrap cluster using `kind` or `k3d`
-1. Initialize Cluster API for Hetzner Cloud in the bootstrap cluster
+1. Initialize Cluster API in the bootstrap cluster
 1. Generate a cluster configuration for the workload cluster
 1. Wait for the control plane to initialize
 1. Deploy Cilium
-1. Deploy cloud-controller-manager for Hetzner Cloud
-1. Deploy the Hetzner Cloud CSI driver
+1. Deploy necessary components, e.g. cloud controller manager and CSI
 1. Wait for the controle plane to be ready
 1. Wait for the worker nodes to be ready
 1. Initialize Cluster API in the workload cluster
