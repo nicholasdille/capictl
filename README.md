@@ -8,23 +8,55 @@ The resulting cluster will be able to manage itself as well as create new cluste
 
 ## Supported infrastructure
 
-Bootstrap clusters: kind, k3d
+Bootstrap clusters: [kind](https://kind.sigs.k8s.io/), [k3d](https://k3d.io)
 
 Infrastructure providers: docker, hetzner, vsphere
 
-CNI: cilium
+CNI: [cilium](https://cilium.io/)
 
 ## Usage
 
-Calling the following script ...
+`capictl` supports a number of options to configure the cluster. The following command will create a cluster with the default configuration:
 
 ```shell
-bash capictl
+bash capictl -n my-cluster
 ```
 
-...creates a Kubernetes cluster using the Cluster API.
+The following settings are supported:
+
+| Option | Variable | Default | Description |
+|--------|----------|---------|-------------|
+| `-n` | `CLUSTER_NAME` | | The name of the cluster |
+| `-v` | `KUBERNETES_VERSION` | (latest) | The version of Kubernetes to deploy |
+| `-b` | `BOOTSTRAP_CLUSTER_PROVIDER` | `kind` | The provider for the bootstrap cluster (valid values are `kind`, `k3d`) |
+| `-i` | `WORKLOAD_PROVIDER` | `docker` | The provider for the workload cluster (valid values are `docker`, `hetzner`, `vsphere`) |
+| `-p` | `CNI_PLUGIN` | `cilium` | The CNI plugin to use (valid values are `cilium`) |
+| `-x` | `POD_CIDR` | `10.42.128.0/17` | The CIDR for pods |
+| `-y` | `SERVICE_CIDR` | `10.42.0.0/17` | The CIDR for services |
+| `-c` | `CONTROL_PLANE_NODE_COUNT` | `1` | The number of control plane nodes |
+| `-w` | `WORKER_NODE_COUNT` | `2` | The number of worker nodes |
+
+All variables can be configured through a `.env` file as well (including the provider specific variables described below).
 
 The corresponding `kubeconfig` file is stored in the current directory as `kubeconfig-${CLUSTER_NAME}`.
+
+The following provider specific variables are supported:
+
+### Hetzner
+
+See the [Hetzner Cloud provider documentation](https://github.com/syself/cluster-api-provider-hetzner/blob/main/docs/topics/preparation.md#variable-preparation-to-generate-a-cluster-template).
+
+The following default values are configured:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `HCLOUD_REGION` | `fsn1` | The Hetzner Cloud region |
+| `HCLOUD_CONTROL_PLANE_MACHINE_TYPE` | `cx21` | The Hetzner Cloud control plane machine type |
+| `HCLOUD_WORKER_MACHINE_TYPE` | `cx21` | The Hetzner Cloud worker machine type |
+
+### vsphere
+
+See the [vsphere provider documentation](https://github.com/kubernetes-sigs/cluster-api-provider-vsphere/blob/main/docs/getting_started.md#configuring-and-installing-cluster-api-provider-vsphere-in-a-management-cluster).
 
 ## Prerequisites
 

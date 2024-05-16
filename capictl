@@ -4,15 +4,15 @@ set -o errexit -o pipefail
 function usage() {
     echo "Usage: $0 [flags]"
     echo
-    echo "    -n <name>               - The name of the cluster"
-    echo "    -v <version>            - The Kubernetes version to use"
-    echo "    -b <bootstrap-provider> - Valid values for the bootstrap cluster provider are 'kind', 'k3d'"
-    echo "    -i <workload-provider>  - Valid values for the infrastructure provider are 'hetzner', 'vsphere', 'docker'"
-    echo "    -p <cni-plugin>         - Valid values for the CNI plugin are 'cilium'"
-    echo "    -x <cidr>               - The pod CIDR to use"
-    echo "    -y <cidr>               - The service CIDR to use"
-    echo "    -c <count>              - The number of control plane nodes"
-    echo "    -w <count>              - The number of worker nodes"
+    echo "    -n <name>               - The name of the cluster (required)"
+    echo "    -v <version>            - The Kubernetes version to use (default to latest version)"
+    echo "    -b <bootstrap-provider> - Valid values for the bootstrap cluster provider are 'kind', 'k3d' (defaults to 'kind')"
+    echo "    -i <workload-provider>  - Valid values for the infrastructure provider are 'hetzner', 'vsphere', 'docker' (defaults to 'docker')"
+    echo "    -p <cni-plugin>         - Valid values for the CNI plugin are 'cilium' (defaults to 'cilium')"
+    echo "    -x <cidr>               - The pod CIDR to use (defaults to 10.42.18.0/17)"
+    echo "    -y <cidr>               - The service CIDR to use (defaults to 10.42.0.0/17)"
+    echo "    -c <count>              - The number of control plane nodes (defaults to 1)"
+    echo "    -w <count>              - The number of worker nodes (defaults to 2)"
     exit 1
 }
 
@@ -53,7 +53,7 @@ while getopts "n:v:b:i:p:c:w:" o; do
 done
 shift $((OPTIND-1))
 
-if test -z "${CLUSTER_NAME}" || test -z "${WORKLOAD_PROVIDER}"; then
+if test -z "${CLUSTER_NAME}"; then
     usage
 fi
 
