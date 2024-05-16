@@ -22,39 +22,39 @@ function bootstrap_create() {
     else
         echo "### Creaking bootstrap cluster"
         k3d cluster create "${name}" \
-            --k3s-arg "--disable=traefik@server:*" \
-            --k3s-arg "--disable=servicelb@server:*" \
-            --k3s-arg "--disable=metrics-server@server:*" \
-            --volume "/var/run/docker.sock:/var/run/docker.sock" \
-            --wait --timeout 5m
+            --kubeconfig-update-default=false #\
+            #--subnet "${POD_CIDR}" \
+            #--volume "/var/run/docker.sock:/var/run/docker.sock"
     fi
+}
+
+function bootstrap_exists() {
+    local name=$1
+
+    k3d cluster list | grep -q "${name}"
 }
 
 function bootstrap_delete() {
     local name=$1
     
-    k3d cluster delete "${name}"
-}
-
-function bootstrap_kubeconfig() {
-    local name=$1
-
-    k3d kubeconfig get "${name}" >kubeconfig-bootstrap
-}
-
-function bootstrap_delete() {
-    local name=$1
-
-    if k3d cluster list | grep -q "${name}"; then
+    if bootstrap_exists "${name}"; then
         echo "### Deleting bootstrap cluster"
         k3d cluster delete "${name}"
     fi
 }
 
+function bootstrap_kubeconfig() {
+    local name=$1
+
+    if bootstrap_exists "${name}"; then
+        k3d kubeconfig get "${name}" >kubeconfig-bootstrap
+    fi
+}
+
 function bootstrap_post_create_hook() {
-    bootstrap_patch_coredns
+    true
 }
 
 function bootstrap_post_init_hook() {
-    bootstrap_patch_coredns
+    true
 }

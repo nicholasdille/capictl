@@ -1,4 +1,5 @@
-/.env
-/kubeconfig*
-/cluster.yaml
-/Corefile.patch.yaml
+.env
+ssh*
+kubeconfig*
+cluster.yaml
+*.log

@@ -52,12 +52,7 @@ function workload_post_generate_hook() {
 function workload_pre_apply_hook() {
     local name=$1
 
-    KUBECONFIG="kubeconfig-${name}" kubectl patch configmap coredns \
-        --kubeconfig=kubeconfig-bootstrap \
-        --namespace=kube-system \
-        --patch-file=vsphere-Corefile
-    # TODO: Test DNS
-    # TODO: Fix CSI configuration
+    true
 }
 
 function workload_post_apply_hook() {

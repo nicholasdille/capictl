@@ -13,10 +13,16 @@ function bootstrap_precheck() {
     fi
 }
 
+function bootstrap_exists() {
+    local name=$1
+
+    kind get clusters | grep -q "${name}"
+}
+
 function bootstrap_create() {
     local name=$1
 
-    if kind get clusters | grep -q "${name}"; then
+    if ! bootstrap_exists "${name}"; then
         echo "### Bootstrap cluster already exists"
 
     else
@@ -31,20 +37,24 @@ function bootstrap_create() {
 function bootstrap_delete() {
     local name=$1
     
-    kind delete cluster --name "${name}"
+    if bootstrap_exists "${name}"; then
+        echo "### Deleting bootstrap cluster"
+        kind delete cluster --name "${name}"
+    fi
 }
 
 function bootstrap_kubeconfig() {
     local name=$1
 
-    kind get kubeconfig --name "${name}" >kubeconfig-bootstrap
+    if bootstrap_exists "${name}"; then
+        kind get kubeconfig --name "${name}" >kubeconfig-bootstrap
+    fi
 }
 
-function bootstrap_delete() {
-    local name=$1
+function bootstrap_post_create_hook() {
+    true
+}
 
-    if kind get clusters | grep -q "${name}"; then
-        echo "### Deleting bootstrap cluster"
-        kind delete cluster --name "${name}"
-    fi
+function bootstrap_post_init_hook() {
+    true
 }
