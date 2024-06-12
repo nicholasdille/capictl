@@ -22,7 +22,7 @@ function bootstrap_exists() {
 function bootstrap_create() {
     local name=$1
 
-    if ! bootstrap_exists "${name}"; then
+    if bootstrap_exists "${name}"; then
         echo "### Bootstrap cluster already exists"
 
     else
