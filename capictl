@@ -142,6 +142,8 @@ if test "${GH_RATE_LIMIT_LEFT}" -lt 10; then
 fi
 
 bootstrap_create "${BOOTSTRAP_CLUSTER_NAME}"
+touch kubeconfig-bootstrap
+chmod 0600 kubeconfig-bootstrap
 bootstrap_kubeconfig "${BOOTSTRAP_CLUSTER_NAME}"
 if ! test -f "kubeconfig-bootstrap"; then
     echo "ERROR: kubeconfig-bootstrap not found"
@@ -218,6 +220,8 @@ if ! kubectl wait cluster ${CLUSTER_NAME} --for condition=ControlPlaneInitialize
 fi
 
 echo "### Getting kubeconfig for workload cluster ${CLUSTER_NAME}"
+touch "kubeconfig-${CLUSTER_NAME}"
+chmod 0600 "kubeconfig-${CLUSTER_NAME}"
 clusterctl get kubeconfig ${CLUSTER_NAME} >"kubeconfig-${CLUSTER_NAME}"
 
 workload_control_plane_initialized_hook "${CLUSTER_NAME}"
