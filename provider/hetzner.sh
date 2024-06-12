@@ -18,6 +18,7 @@ function workload_precheck() {
         SSH_KEY_JSON="$( hcloud ssh-key list --selector type=caph --output json )"
         if test "$( jq 'length' <<<"${SSH_KEY_JSON}" )" -eq 0; then
             echo "### Create and upload SSH key"
+            rm -f ssh ssh.pub
             ssh-keygen -f ssh -t ed25519 -N ''
             hcloud ssh-key create --name caph --label type=caph --public-key-from-file ./ssh.pub
 
