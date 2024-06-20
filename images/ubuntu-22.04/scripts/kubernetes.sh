@@ -23,20 +23,20 @@ if test -z "${KUBERNETES_VERSION}"; then
   echo "KUBERNETES_VERSION is not set"
   exit 1
 fi
-TRIMMED_KUBERNETES_VERSION=$(echo ${KUBERNETES_VERSION} | sed 's/^v//' | awk -F . '{print $1 "." $2}')
+TRIMMED_KUBERNETES_VERSION=$(echo ${KUBERNETES_VERSION} | sed 's/^v//' | cut -d. -f1,2)
 mkdir -p /etc/apt/keyrings/
-curl -fsSL https://pkgs.k8s.io/core:/stable:/v$TRIMMED_KUBERNETES_VERSION/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
-echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v$TRIMMED_KUBERNETES_VERSION/deb/ /" | sudo tee /etc/apt/sources.list.d/kubernetes.list
+curl --silent --show-error --location --fail https://pkgs.k8s.io/core:/stable:/v${TRIMMED_KUBERNETES_VERSION}/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v${TRIMMED_KUBERNETES_VERSION}/deb/ /" | sudo tee /etc/apt/sources.list.d/kubernetes.list
 apt-get update
 
 # Check actual version: https://github.com/kubernetes/kubernetes/releases
 
-apt-get install -y kubelet=$KUBERNETES_VERSION-1.1 kubeadm=$KUBERNETES_VERSION-1.1 kubectl=$KUBERNETES_VERSION-1.1 bash-completion
+apt-get install -y kubelet=${KUBERNETES_VERSION}-1.1 kubeadm=${KUBERNETES_VERSION}-1.1 kubectl=${KUBERNETES_VERSION}-1.1 bash-completion
 apt-mark hold kubelet kubectl kubeadm
 
 systemctl enable kubelet
 
-kubeadm config images pull --kubernetes-version $KUBERNETES_VERSION
+kubeadm config images pull --kubernetes-version ${KUBERNETES_VERSION}
 
 # enable completion
 echo 'source <(kubectl completion bash)' >>/root/.bashrc

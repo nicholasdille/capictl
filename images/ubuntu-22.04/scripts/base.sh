@@ -19,6 +19,7 @@ set -o nounset
 set -o pipefail
 
 echo '--> Starting Base Installation.'
+
 # Set locale
 localectl set-locale LANG=en_US.UTF-8 
 localectl set-locale LANGUAGE=en_US.UTF-8
@@ -28,13 +29,19 @@ apt-get update -y
 
 # install basic tooling
 apt-get -y install \
-    at jq unzip wget socat mtr logrotate apt-transport-https
+    at \
+    jq \
+    unzip \
+    curl \
+    socat \
+    mtr \
+    logrotate \
+    apt-transport-https
 
 # Install yq
-YQ_VERSION=v4.20.1 #https://github.com/mikefarah/yq
-YQ_BINARY=yq_linux_${PACKER_ARCH}
-wget https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/${YQ_BINARY} -O /usr/bin/yq &&\
-    chmod +x /usr/bin/yq
+curl --silent --show-error --location --fail --output /usr/bin/yq \
+    https://github.com/mikefarah/yq/releases/latest/download/yq_linux_${PACKER_ARCH}
+chmod +x /usr/bin/yq
 
 echo '--> Starting Base Configuration.'
 
@@ -72,6 +79,4 @@ cat > /etc/logrotate.d/allpodlogs <<"EOF"
     dateformat -%Y%m%d-%s
     create 0644 root root
 }
-
 EOF
-

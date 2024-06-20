@@ -57,13 +57,22 @@ if test -z "${CONTAINERD}"; then
 fi
 
 # Install containerd
-wget https://github.com/containerd/containerd/releases/download/v${CONTAINERD}/cri-containerd-cni-${CONTAINERD}-linux-${PACKER_ARCH}.tar.gz
-wget https://github.com/containerd/containerd/releases/download/v${CONTAINERD}/cri-containerd-cni-${CONTAINERD}-linux-${PACKER_ARCH}.tar.gz.sha256sum
+curl --silent --show-error --location --fail --remote-name https://github.com/containerd/containerd/releases/download/v${CONTAINERD}/cri-containerd-cni-${CONTAINERD}-linux-${PACKER_ARCH}.tar.gz
+curl --silent --show-error --location --fail --remote-name https://github.com/containerd/containerd/releases/download/v${CONTAINERD}/cri-containerd-cni-${CONTAINERD}-linux-${PACKER_ARCH}.tar.gz.sha256sum
 sha256sum --check cri-containerd-cni-${CONTAINERD}-linux-${PACKER_ARCH}.tar.gz.sha256sum
 tar --no-overwrite-dir -C / -xzf cri-containerd-cni-${CONTAINERD}-linux-${PACKER_ARCH}.tar.gz
+rm -f \
+    cri-containerd-cni-${CONTAINERD}-linux-${PACKER_ARCH}.tar.gz \
+    cri-containerd-cni-${CONTAINERD}-linux-${PACKER_ARCH}.tar.gz.sha256sum
 
-# Cleanup
-rm -f cri-containerd-cni-${CONTAINERD}-linux-${PACKER_ARCH}.tar.gz cri-containerd-cni-${CONTAINERD}-linux-${PACKER_ARCH}.tar.gz.sha256sum
+# Update CNI
+curl --silent --show-error --location --fail --remote-name https://github.com/containernetworking/plugins/releases/download/v${CNI}/cni-plugins-linux-${PACKER_ARCH}-v${CNI}.tgz
+curl --silent --show-error --location --fail --remote-name https://github.com/containernetworking/plugins/releases/download/v${CNI}/cni-plugins-linux-${PACKER_ARCH}-v${CNI}.tgz.sha256
+sha256sum --check cni-plugins-linux-${PACKER_ARCH}-v${CNI}.tgz.sha256
+tar --no-overwrite-dir -C /opt/cni/bin -xzf cni-plugins-linux-${PACKER_ARCH}-v${CNI}.tgz
+rm -f \
+    cni-plugins-linux-${PACKER_ARCH}-v${CNI}.tgz \
+    cni-plugins-linux-${PACKER_ARCH}-v${CNI}.tgz.sha256
 
 # Sets permission accordingly to CIS Benchmark
 chmod -R 644 /etc/cni

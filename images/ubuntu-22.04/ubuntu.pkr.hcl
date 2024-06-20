@@ -20,13 +20,19 @@ variable "arch" {
 variable "kubernetes_version" {
   type    = string
   # renovate: datasource=github-releases depName=kubernetes/kubernetes extractVersion=^v(?<version>\d+\.\d+\.\d+)$
-  default = "1.28.4"
+  default = "1.30.2"
 }
 
 variable "containerd_version" {
   type    = string
   # renovate: datasource=github-releases depName=containerd/containerd extractVersion=^v(?<version>\d+\.\d+\.\d+)$
-  default = "1.7.10"
+  default = "1.7.18"
+}
+
+variable "cni_version" {
+  type    = string
+  # renovate: datasource=github-releases depName=containernetworking/plugins extractVersion=^v(?<version>\d+\.\d+\.\d+)$
+  default = "1.5.1"
 }
 
 variable "image-name" {
@@ -45,9 +51,14 @@ source "hcloud" "ubuntu" {
     server_type = "cx21"
     ssh_username = "root"
 
-    snapshot_name = "${var.os}-${var.arch}"
+    snapshot_name = "${var.os}-${var.arch}-k8s-${var.kubernetes_version}"
     snapshot_labels = {
-        "caph-image-name" = "${var.os}-${var.arch}"
+        "os" = "${var.os}"
+        "arch" = "${var.arch}"
+        "kubernetes" = "${var.kubernetes_version}"
+        "containerd" = "${var.containerd_version}"
+        "cni" = "${var.cni_version}"
+        "caph-image-name" = "${var.os}-${var.arch}-k8s-${var.kubernetes_version}"
     }
 }
 
@@ -59,7 +70,8 @@ build {
             "PACKER_OS_IMAGE=${var.os}",
             "PACKER_ARCH=${var.arch}",
             "KUBERNETES_VERSION=${var.kubernetes_version}",
-            "CONTAINERD=${var.containerd_version}"
+            "CONTAINERD=${var.containerd_version}",
+            "CNI=${var.cni_version}",
         ]
         scripts = [
             "scripts/base.sh",
