@@ -15,7 +15,7 @@
   "rebaseWhen": "conflicted",
   "customManagers": [
     {
-      "type": "regex",
+      "customType": "regex",
       "description": "Update descr",
       "fileMatch": ["(^|\/|\\.).+?pkr.hcl$"],
       "matchStrings": [
