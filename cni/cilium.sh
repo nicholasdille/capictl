@@ -15,24 +15,22 @@ function cni_deploy() {
     helm repo add cilium https://helm.cilium.io
     helm repo update cilium
     KUBECONFIG=kubeconfig-${name} \
-    helm upgrade --install \
-        --namespace kube-system \
+    helm upgrade --install --namespace=kube-system \
         cilium cilium/cilium \
             --set cluster.id=0 \
             --set cluster.name=${name} \
-            --set encryption.nodeEncryption=false \
-            --set extraConfig.ipam=kubernetes \
-            --set extraConfig.kubeProxyReplacement=strict \
-            --set kubeProxyReplacement=strict \
+            --set encryption.nodeEncryption="false" \
+            --set envoy.enabled="false" \
+            --set ipam.mode=kubernetes \
+            --set kubeProxyReplacement="true" \
             --set operator.replicas=1 \
             --set serviceAccounts.cilium.name=cilium \
             --set serviceAccounts.operator.name=cilium-operator \
-            --set tunnel=vxlan \
-            --set prometheus.enabled=true \
-            --set operator.prometheus.enabled=true \
-            --set hubble.relay.enabled=true \
-            --set hubble.ui.enabled=true \
-            --set hubble.metrics.enabled="{dns,drop,tcp,flow,icmp,http}" \
+            --set tunnel-protocol=vxlan \
+            --set prometheus.enabled="true" \
+            --set operator.prometheus.enabled="true" \
+            --set hostFirewall.enabled="false" \
+            --set podSecurityContext.appArmorProfile.type="Unconfined" \
             --wait \
             --timeout 5m
 }
