@@ -50,11 +50,11 @@ See the [Hetzner Cloud provider documentation](https://github.com/syself/cluster
 
 The following default values are configured:
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `HCLOUD_REGION` | `fsn1` | The Hetzner Cloud region |
-| `HCLOUD_CONTROL_PLANE_MACHINE_TYPE` | `cx21` | The Hetzner Cloud control plane machine type |
-| `HCLOUD_WORKER_MACHINE_TYPE` | `cx21` | The Hetzner Cloud worker machine type |
+| Variable                            | Default | Description                                  |
+|-------------------------------------|---------|----------------------------------------------|
+| `HCLOUD_REGION`                     | `fsn1`  | The Hetzner Cloud region                     |
+| `HCLOUD_CONTROL_PLANE_MACHINE_TYPE` | `cx22`  | The Hetzner Cloud control plane machine type |
+| `HCLOUD_WORKER_MACHINE_TYPE`        | `cx22`  | The Hetzner Cloud worker machine type        |
 
 ### vsphere
 
@@ -73,6 +73,10 @@ The script relies on a number of binaries to work:
 - `cilium`
 
 Those prerequisites can be installed with [`uniget`](https://uniget.dev).
+
+## Image
+
+This repository contains Packer based images for Hetzner Cloud located in the [`images` directory](images/).
 
 ## Internals
 

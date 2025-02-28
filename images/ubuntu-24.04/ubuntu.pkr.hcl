@@ -9,7 +9,7 @@ packer {
 
 variable "os" {
     type = string
-    default = "ubuntu-22.04"
+    default = "ubuntu-24.04"
 }
 
 variable "arch" {
@@ -37,7 +37,7 @@ variable "cni_version" {
 
 variable "image-name" {
     type = string
-    default = "ubuntu-22.04-kubeadm"
+    default = "ubuntu-24.04-kubeadm"
 }
 
 variable "version" {
@@ -48,7 +48,7 @@ variable "version" {
 source "hcloud" "ubuntu" {
     image = "${var.os}"
     location = "fsn1"
-    server_type = "cx21"
+    server_type = "cx22"
     ssh_username = "root"
 
     snapshot_name = "${var.os}-${var.arch}-k8s-${var.kubernetes_version}"

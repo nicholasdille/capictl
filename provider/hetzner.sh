@@ -60,9 +60,10 @@ function workload_precheck() {
     if test -z "${IMAGE_NAME}"; then
         IMAGE_NAME="$(
             hcloud image list --selector caph-image-name --output json \
-            | jq --raw-output 'sort_by(.created) | .[-1] | .labels."caph-image-name"'
+            | jq --raw-output 'sort_by(.created) | .[-1] | select(.labels."caph-image-name") | .labels."caph-image-name"'
         )"
     fi
+    echo "### Using image ${IMAGE_NAME}"
 }
 
 function workload_post_generate_hook() {
