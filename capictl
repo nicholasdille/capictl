@@ -222,6 +222,7 @@ cat cluster.yaml \
 | kubectl apply -f -
 workload_post_apply_hook "${CLUSTER_NAME}"
 
+echo "### Waiting for control plane to initialize"
 if ! kubectl wait cluster ${CLUSTER_NAME} --for condition=ControlPlaneInitialized --timeout=${TIMEOUT_IN_MINUTES}m; then
     echo "ERROR: Control plane failed to initialize"
     clusterctl describe cluster ${CLUSTER_NAME} --show-conditions all
@@ -242,19 +243,23 @@ if ! cni_precheck; then
 fi
 cni_deploy "${CLUSTER_NAME}"
 
-if ! kubectl wait  cluster ${CLUSTER_NAME} --for condition=Ready --timeout=${TIMEOUT_IN_MINUTES}m; then
+echo "### Waiting for control plane to become ready"
+if ! kubectl wait cluster ${CLUSTER_NAME} --for condition=Ready --timeout=${TIMEOUT_IN_MINUTES}m; then
     echo "ERROR: Control plane failed to become ready"
     clusterctl describe cluster ${CLUSTER_NAME} --show-conditions all
     exit 1
 fi
-echo "### Controle plane ready"
+echo "    Controle plane ready"
+
+echo "### Waiting for control plane machines to become healthy"
 if ! kubectl wait machines --selector cluster.x-k8s.io/control-plane-name=${CLUSTER_NAME}-control-plane --for condition=NodeHealthy --timeout=${TIMEOUT_IN_MINUTES}m; then
     echo "ERROR: Control plane machines failed to become healthy"
     clusterctl describe cluster ${CLUSTER_NAME} --show-conditions all
     exit 1
 fi
-echo "### Control plane machines healthy"
+echo "    Control plane machines healthy"
 
+echo "### Waiting for worker nodes to become ready"
 if ! kubectl wait machinedeployment ${CLUSTER_NAME}-md-0 --for condition=Ready  --timeout=${TIMEOUT_IN_MINUTES}m; then
     echo "ERROR: Nodes failed to become ready"
     clusterctl describe cluster ${CLUSTER_NAME} --show-conditions all
@@ -266,14 +271,15 @@ if ! kubectl --kubeconfig=kubeconfig-${CLUSTER_NAME} wait nodes --all --all-name
     kubectl get nodes --all-namespaces
     exit 1
 fi
-echo "### Worker nodes are ready"
+echo "    Worker nodes are ready"
 
+echo "### Waiting for pods to become ready"
 if ! kubectl --kubeconfig=kubeconfig-${CLUSTER_NAME} wait pods --all --all-namespaces --for condition=Ready --timeout=${TIMEOUT_IN_MINUTES}m; then
     echo "ERROR: Pods failed to become ready"
     kubectl get pods --all-namespaces
     exit 1
 fi
-echo "### Pods are ready"
+echo "    Pods are ready"
 
 if ! cni_post_install_hook "${CLUSTER_NAME}"; then
     echo "ERROR: CNI provider post install hook failed"
