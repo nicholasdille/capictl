@@ -6,7 +6,7 @@ function usage() {
     echo
     echo "    -n <name>               - The name of the cluster (required)"
     echo "    -v <version>            - The Kubernetes version to use (default to latest version)"
-    echo "    -b <bootstrap-provider> - Valid values for the bootstrap cluster provider are 'kind', 'k3d' (defaults to 'kind')"
+    echo "    -b <bootstrap-provider> - Valid values for the bootstrap cluster provider are 'kind', 'vm-kind', 'k3d' (defaults to 'kind')"
     echo "    -i <workload-provider>  - Valid values for the infrastructure provider are 'hetzner', 'vsphere', 'docker' (defaults to 'docker')"
     echo "    -p <cni-plugin>         - Valid values for the CNI plugin are 'cilium' (defaults to 'cilium')"
     echo "    -x <cidr>               - The pod CIDR to use (defaults to 10.42.18.0/17)"
