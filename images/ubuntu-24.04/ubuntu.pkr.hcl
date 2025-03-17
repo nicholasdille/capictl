@@ -26,7 +26,7 @@ variable "kubernetes_version" {
 variable "containerd_version" {
   type    = string
   # renovate: datasource=github-releases depName=containerd/containerd extractVersion=^v(?<version>\d+\.\d+\.\d+)$
-  default = "1.7.26"
+  default = "1.7.27"
 }
 
 variable "cni_version" {
