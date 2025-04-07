@@ -2,4 +2,5 @@
 ssh*
 kubeconfig*
 cluster.yaml
+auth-config.yaml
 *.log

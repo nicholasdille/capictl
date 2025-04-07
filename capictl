@@ -13,10 +13,12 @@ function usage() {
     echo "    -y <cidr>               - The service CIDR to use (defaults to 10.42.0.0/17)"
     echo "    -c <count>              - The number of control plane nodes (defaults to 1)"
     echo "    -w <count>              - The number of worker nodes (defaults to 2)"
+    echo "    -t                      - Interrupt after the cluster template was generated"
+    echo "    -o                      - Read authentication configuration from authentication-config.yaml"
     exit 1
 }
 
-while getopts "n:v:b:i:p:c:w:" o; do
+while getopts "n:v:b:i:p:c:w:to" o; do
     case "${o}" in
         n)
             CLUSTER_NAME="${OPTARG}"
@@ -45,6 +47,12 @@ while getopts "n:v:b:i:p:c:w:" o; do
         w)
             WORKER_NODE_COUNT="${OPTARG}"
             ;;
+        t)
+            BREAK_AFTER_CLUSTER_TEMPLATE=true
+            ;;
+        o)
+            OIDC_AUTH=true
+            ;;
         *)
             echo "ERROR: Unknown option ${o}"
             usage
@@ -72,7 +80,10 @@ fi
 : "${BOOTSTRAP_PROVIDER:=kubeadm}"
 : "${CONTROL_PLANE_PROVIDER:=kubeadm}"
 
+: "${BREAK_AFTER_CLUSTER_TEMPLATE:=false}"
 : "${REUSE_CLUSTER_YAML:=false}"
+
+: "${OIDC_AUTH:=false}"
 
 if ! type clusterctl >/dev/null 2>&1; then
     echo "ERROR: clusterctl not found"
@@ -167,6 +178,7 @@ clusterctl init \
     --infrastructure "${INFRASTRUCTURE_PROVIDER}" \
     --bootstrap "${BOOTSTRAP_PROVIDER}" \
     --control-plane "${CONTROL_PLANE_PROVIDER}" \
+    --addon helm \
     --wait-providers \
     --wait-provider-timeout 300
 if ! bootstrap_post_init_hook; then
@@ -214,12 +226,26 @@ if test -n "${SERVICE_CIDR}"; then
     export SERVICE_CIDR
     yq --inplace eval 'select(.kind == "Cluster").spec.clusterNetwork.services.cidrBlocks |= [env(SERVICE_CIDR)]' cluster.yaml
 fi
+if ${OIDC_AUTH} && test -f auth-config.yaml; then
+    yq --inplace eval 'select(.kind == "KubeadmControlPlane").spec.kubeadmConfigSpec.files |= [{"content": load(auth-config.yaml), "owner": "root:root", "path": "/etc/kubernetes/auth/auth-config.yaml", "permission": "0600}]' cluster.yaml
+    yq --inplace eval 'select(.kind == "KubeadmControlPlane").spec.kubeadmConfigSpec.clusterConfiguration.apiServer.extraArgs.authentication-config = "/etc/kubernetes/auth/auth-config.yaml"' cluster.yaml
+fi
+export CNI_PLUGIN
+yq --inplace eval 'select(.kind == "Cluster").metadata.labels.cniChart = env(CNI_PLUGIN)' cluster.yaml
+yq --inplace eval 'select(.kind == "Cluster").metadata.labels.kyvernoChart = "enabled"' cluster.yaml
 workload_post_generate_hook "${CLUSTER_NAME}"
+
+if ${BREAK_AFTER_CLUSTER_TEMPLATE}; then
+    echo "### Cluster template generated"
+    echo "### To continue, run the same command without -t"
+    exit 0
+fi
 
 echo "### Rolling out workload cluster"
 workload_pre_apply_hook "${CLUSTER_NAME}"
 cat cluster.yaml \
 | kubectl apply -f -
+kubectl apply --filename=helm/*.yaml
 workload_post_apply_hook "${CLUSTER_NAME}"
 
 echo "### Waiting for control plane to initialize"
@@ -314,14 +340,14 @@ clusterctl move --to-kubeconfig kubeconfig-${CLUSTER_NAME}
 echo "### Creating cluster admin"
 mv kubeconfig-${CLUSTER_NAME} kubeconfig-${CLUSTER_NAME}-certificate
 export KUBECONFIG=kubeconfig-${CLUSTER_NAME}-certificate
-cat <<EOF | kubectl --namespace kube-system apply -f -
+cat <<EOF | kubectl --namespace kube-system apply --filename=-
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: my-cluster-admin
   namespace: kube-system
 EOF
-cat <<EOF | kubectl --namespace kube-system apply -f -
+cat <<EOF | kubectl --namespace kube-system apply --filename=-
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
@@ -335,7 +361,7 @@ subjects:
   name: my-cluster-admin
   namespace: kube-system
 EOF
-cat <<EOF | kubectl --namespace kube-system apply -f -
+cat <<EOF | kubectl --namespace kube-system apply --filename=-
 apiVersion: v1
 kind: Secret
 metadata:

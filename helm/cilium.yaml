@@ -1,0 +1,45 @@
+apiVersion: addons.cluster.x-k8s.io/v1alpha1
+kind: HelmChartProxy
+metadata:
+  name: cilium
+spec:
+  clusterSelector:
+    matchLabels:
+      cniChart: cilium
+  repoURL: https://helm.cilium.io
+  chartName: cilium
+  options:
+    waitForJobs: true
+    wait: true
+    timeout: 5m
+    install:
+      createNamespace: true
+  valuesTemplate: |
+    cluster:
+      id: 0
+      name={{ .ControlPlane.metadata.name }}-cilium
+    encryption:
+      nodeEncryption: "false"
+    envoy:
+      enabled: "false"
+    ipam:
+      mode: kubernetes
+    kubeProxyReplacement: "true"
+    operator:
+      replicas: 1
+    serviceAccounts:
+      cilium:
+        name: cilium
+      operator:
+        name: cilium-operator
+    tunnel-protocol: vxlan
+    hostFirewall:
+      enabled: "false"
+    podSecurityContext:
+      appArmorProfile:
+        type: Unconfined
+    prometheus:
+      enabled: "true"
+    operator:
+      prometheus:
+        enabled: "true"
