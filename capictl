@@ -97,6 +97,10 @@ if ! type jq >/dev/null 2>&1; then
     echo "ERROR: jq not found"
     exit 1
 fi
+if ! type yq >/dev/null 2>&1; then
+    echo "ERROR: yq not found"
+    exit 1
+fi
 
 if test -z "${KUBERNETES_VERSION}"; then
     KUBERNETES_VERSION="$(
@@ -397,3 +401,4 @@ kubectl config use-context cluster-admin
 
 echo "### Removing bootstrap cluster"
 bootstrap_delete "${CLUSTER_NAME}"
+rm kubeconfig-bootstrap
