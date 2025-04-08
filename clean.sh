@@ -23,7 +23,15 @@ export HCLOUD_TOKEN
 CLUSTER_NAME=$1
 : "${CLUSTER_NAME:=my-cluster}"
 
-echo "### Remove virtual machines"
+echo "### Removing jump host"
+hcloud server list --selector "type=${CLUSTER_NAME}-jump" --output json \
+| jq --raw-output '.[].name' \
+| xargs --no-run-if-empty -n 1 hcloud server delete
+hcloud ssh-key list --selector "type=${CLUSTER_NAME}-jump" --output json \
+| jq --raw-output '.[].name' \
+| xargs --no-run-if-empty -n 1 hcloud ssh-key delete
+
+echo "### Remove cluster nodes"
 hcloud server list --selector "caph-cluster-${CLUSTER_NAME}=owned" --output json \
 | jq --raw-output '.[].name' \
 | xargs --no-run-if-empty -n 1 hcloud server delete

@@ -18,7 +18,7 @@ function usage() {
     exit 1
 }
 
-while getopts "n:v:b:i:p:c:w:to" o; do
+while getopts "n:v:b:i:p:c:w:tro" o; do
     case "${o}" in
         n)
             CLUSTER_NAME="${OPTARG}"
@@ -49,6 +49,9 @@ while getopts "n:v:b:i:p:c:w:to" o; do
             ;;
         t)
             BREAK_AFTER_CLUSTER_TEMPLATE=true
+            ;;
+        r)
+            REUSE_CLUSTER_YAML=true
             ;;
         o)
             OIDC_AUTH=true
@@ -236,12 +239,14 @@ if ${OIDC_AUTH} && test -f auth-config.yaml; then
 fi
 export CNI_PLUGIN
 yq --inplace eval 'select(.kind == "Cluster").metadata.labels.cniChart = env(CNI_PLUGIN)' cluster.yaml
+yq --inplace eval 'select(.kind == "Cluster").metadata.labels.clusterApiVisualizerChart = "enabled"' cluster.yaml
 yq --inplace eval 'select(.kind == "Cluster").metadata.labels.kyvernoChart = "enabled"' cluster.yaml
 workload_post_generate_hook "${CLUSTER_NAME}"
 
 if ${BREAK_AFTER_CLUSTER_TEMPLATE}; then
     echo "### Cluster template generated"
-    echo "### To continue, run the same command without -t"
+    echo "### To continue with the generated cluster template, run the same command without -t but add -r"
+    echo "### To generate a new cluster template and continue, run the same command without -r"
     exit 0
 fi
 

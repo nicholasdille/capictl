@@ -8,23 +8,22 @@ spec:
       cniChart: cilium
   repoURL: https://helm.cilium.io
   chartName: cilium
+  namespace: kube-system
   options:
     waitForJobs: true
     wait: true
     timeout: 5m
-    install:
-      createNamespace: true
   valuesTemplate: |
     cluster:
       id: 0
-      name={{ .ControlPlane.metadata.name }}-cilium
+      name: {{ .ControlPlane.metadata.name }}-cilium
     encryption:
-      nodeEncryption: "false"
+      nodeEncryption: false
     envoy:
-      enabled: "false"
+      enabled: false
     ipam:
       mode: kubernetes
-    kubeProxyReplacement: "true"
+    kubeProxyReplacement: true
     operator:
       replicas: 1
     serviceAccounts:
@@ -34,12 +33,12 @@ spec:
         name: cilium-operator
     tunnel-protocol: vxlan
     hostFirewall:
-      enabled: "false"
+      enabled: false
     podSecurityContext:
       appArmorProfile:
         type: Unconfined
     prometheus:
-      enabled: "true"
+      enabled: true
     operator:
       prometheus:
-        enabled: "true"
+        enabled: true

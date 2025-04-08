@@ -8,13 +8,12 @@ spec:
       hcloudCsiChart: enabled
   repoURL: https://charts.syself.com
   chartName: csi-hcloud
+  namespace: kube-system
   options:
     waitForJobs: true
     wait: true
     timeout: 5m
-    install:
-      createNamespace: true
-  valuesTemplate:
+  valuesTemplate: |
     controller:
       hcloudToken:
         existingSecret:

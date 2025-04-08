@@ -75,6 +75,9 @@ function workload_post_generate_hook() {
     local name=$1
 
     sed -i '/pod-eviction-timeout/d' cluster.yaml
+
+    yq --inplace eval 'select(.kind == "Cluster").metadata.labels.hcloudCcmChart = "enabled"' cluster.yaml
+    yq --inplace eval 'select(.kind == "Cluster").metadata.labels.hcloudCsiChart = "enabled"' cluster.yaml
 }
 
 function workload_pre_apply_hook() {
@@ -82,7 +85,7 @@ function workload_pre_apply_hook() {
 
     echo "### Prepare credentials"
     if ! kubectl get secret hetzner >/dev/null 2>&1; then
-        kubectl create secret generic hetzner --from-literal=hcloud="${HCLOUD_TOKEN}"
+        kubectl create secret generic hetzner --from-literal=hcloud="${HCLOUD_TOKEN}" --from-literal=network=""
 
     else
         kubectl patch secret hetzner --patch-file <(cat <<EOF
@@ -92,9 +95,6 @@ EOF
     )
     fi
     kubectl patch secret hetzner --patch '{"metadata":{"labels":{"clusterctl.cluster.x-k8s.io/move":""}}}'
-
-    yq --inplace eval 'select(.kind == "Cluster").metadata.labels.hcloudCcmChart = "enabled"' cluster.yaml
-    yq --inplace eval 'select(.kind == "Cluster").metadata.labels.hcloudCsiChart = "enabled"' cluster.yaml
 }
 
 function workload_post_apply_hook() {
