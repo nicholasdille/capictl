@@ -21,6 +21,7 @@ function workload_precheck() {
         echo "ERROR: govc not found"
         exit 1
     fi
+
     for VAR_NAME in ${REQUIRED_PROVIDER_VARIABLES[@]}; do
         if [[ -z "${!VAR_NAME}" ]]; then
             echo "ERROR: The following variables are required:"

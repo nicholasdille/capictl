@@ -1,0 +1,26 @@
+apiVersion: addons.cluster.x-k8s.io/v1alpha1
+kind: HelmChartProxy
+metadata:
+  name: hcloud-csi
+spec:
+  clusterSelector:
+    matchLabels:
+      hcloudCsiChart: enabled
+  repoURL: https://charts.syself.com
+  chartName: csi-hcloud
+  options:
+    waitForJobs: true
+    wait: true
+    timeout: 5m
+    install:
+      createNamespace: true
+  valuesTemplate:
+    controller:
+      hcloudToken:
+        existingSecret:
+          name: hetzner
+          key: hcloud
+    storageClasses:
+    - name: hcloud-volumes
+      defaultStorageClass: "true"
+      reclaimPolicy: Retain

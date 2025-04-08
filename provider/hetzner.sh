@@ -6,6 +6,11 @@ REQUIRED_PROVIDER_VARIABLES=(
 )
 
 function workload_precheck() {
+    if ! type hcloud >/dev/null 2>&1; then
+        echo "ERROR: hcloud not found"
+        return 1
+    fi
+
     if test -z "${HCLOUD_TOKEN}"; then
         echo "ERROR: Missing HCLOUD_TOKEN. Aborting."
         exit 1
@@ -87,6 +92,9 @@ EOF
     )
     fi
     kubectl patch secret hetzner --patch '{"metadata":{"labels":{"clusterctl.cluster.x-k8s.io/move":""}}}'
+
+    yq --inplace eval 'select(.kind == "Cluster").metadata.labels.hcloudCcmChart = "enabled"' cluster.yaml
+    yq --inplace eval 'select(.kind == "Cluster").metadata.labels.hcloudCsiChart = "enabled"' cluster.yaml
 }
 
 function workload_post_apply_hook() {
@@ -98,25 +106,7 @@ function workload_post_apply_hook() {
 function workload_control_plane_initialized_hook() {
     local name=$1
 
-    echo "### Deploy cloud-controller-manager"
-    helm repo add syself https://charts.syself.com
-    helm repo update syself
-    KUBECONFIG=kubeconfig-${CLUSTER_NAME} helm upgrade --install \
-        --namespace kube-system \
-        ccm syself/ccm-hcloud \
-            --set secret.name=hetzner \
-            --set secret.tokenKeyName=hcloud \
-            --set privateNetwork.enabled=false
-
-    echo "### Deploy csi"
-    KUBECONFIG=kubeconfig-${CLUSTER_NAME} helm upgrade --install \
-        --namespace kube-system \
-        csi syself/csi-hcloud \
-            --set controller.hcloudToken.existingSecret.name=hetzner \
-            --set controller.hcloudToken.existingSecret.key=hcloud \
-            --set storageClasses[0].name=hcloud-volumes \
-            --set storageClasses[0].defaultStorageClass=true \
-            --set storageClasses[0].reclaimPolicy=Retain
+    # Migrated to CAPI helm addon
 }
 
 function workload_logs() {
