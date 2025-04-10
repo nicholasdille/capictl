@@ -241,6 +241,7 @@ export CNI_PLUGIN
 yq --inplace eval 'select(.kind == "Cluster").metadata.labels.cniChart = env(CNI_PLUGIN)' cluster.yaml
 yq --inplace eval 'select(.kind == "Cluster").metadata.labels.clusterApiVisualizerChart = "enabled"' cluster.yaml
 yq --inplace eval 'select(.kind == "Cluster").metadata.labels.kyvernoChart = "enabled"' cluster.yaml
+yq --inplace eval 'select(.kind == "Cluster").metadata.labels.traefikChart = "enabled"' cluster.yaml
 workload_post_generate_hook "${CLUSTER_NAME}"
 
 if ${BREAK_AFTER_CLUSTER_TEMPLATE}; then

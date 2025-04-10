@@ -1,0 +1,28 @@
+apiVersion: addons.cluster.x-k8s.io/v1alpha1
+kind: HelmChartProxy
+metadata:
+  name: traefik
+spec:
+  clusterSelector:
+    matchLabels:
+      traefikChart: enabled
+  repoURL: https://traefik.github.io/charts
+  chartName: traefik
+  namespace: kube-system
+  options:
+    waitForJobs: true
+    wait: true
+    timeout: 5m
+  valuesTemplate: |
+    service:
+      annotations:
+        load-balancer.hetzner.cloud/location: {{ index .HetznerCluster.spec.controlPlaneRegions 0 }}
+    ingressRoute:
+      dashboard:
+        enabled: true
+    providers:
+      kubernetesGateway:
+        enabled: true
+    logs:
+      general:
+        level: DEBUG
