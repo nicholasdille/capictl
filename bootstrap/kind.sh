@@ -28,9 +28,9 @@ function bootstrap_create() {
     else
         echo "### Creaking bootstrap cluster"
         kind create cluster \
-            --name "${name}" \
-            --config bootstrap/kind.yaml \
-            --wait 5m
+            --name="${name}" \
+            --config=bootstrap/kind.yaml \
+            --wait=5m
     fi
 }
 
@@ -39,7 +39,7 @@ function bootstrap_delete() {
     
     if bootstrap_exists "${name}"; then
         echo "### Deleting bootstrap cluster"
-        kind delete cluster --name "${name}"
+        kind delete cluster --name="${name}"
     fi
 }
 
@@ -47,7 +47,9 @@ function bootstrap_kubeconfig() {
     local name=$1
 
     if bootstrap_exists "${name}"; then
-        kind get kubeconfig --name "${name}" >kubeconfig-bootstrap
+        kind get kubeconfig \
+            --name="${name}" \
+        >kubeconfig-bootstrap
     fi
 }
 

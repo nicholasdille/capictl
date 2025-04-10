@@ -21,5 +21,5 @@ spec:
           key: hcloud
     storageClasses:
     - name: hcloud-volumes
-      defaultStorageClass: "true"
+      defaultStorageClass: true
       reclaimPolicy: Retain

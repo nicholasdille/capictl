@@ -20,12 +20,15 @@ function workload_precheck() {
     if test -z "${HCLOUD_SSH_KEY}"; then
         HCLOUD_SSH_KEY=caph
 
-        SSH_KEY_JSON="$( hcloud ssh-key list --selector type=caph --output json )"
+        SSH_KEY_JSON="$( hcloud ssh-key list --selector=type=caph --output=json )"
         if test "$( jq 'length' <<<"${SSH_KEY_JSON}" )" -eq 0; then
             echo "### Create and upload SSH key"
             rm -f ssh ssh.pub
             ssh-keygen -f ssh -t ed25519 -N ''
-            hcloud ssh-key create --name caph --label type=caph --public-key-from-file ./ssh.pub
+            hcloud ssh-key create \
+                --name=caph \
+                --label=type=caph \
+                --public-key-from-file=./ssh.pub
 
         elif test "$( jq 'length' <<<"${SSH_KEY_JSON}" )" -eq 1; then
             echo "### Use existing SSH key"
@@ -64,7 +67,7 @@ function workload_precheck() {
 
     if test -z "${IMAGE_NAME}"; then
         IMAGE_NAME="$(
-            hcloud image list --selector caph-image-name --output json \
+            hcloud image list --selector=caph-image-name --output=json \
             | jq --raw-output 'sort_by(.created) | .[-1] | select(.labels."caph-image-name") | .labels."caph-image-name"'
         )"
     fi
@@ -85,16 +88,18 @@ function workload_pre_apply_hook() {
 
     echo "### Prepare credentials"
     if ! kubectl get secret hetzner >/dev/null 2>&1; then
-        kubectl create secret generic hetzner --from-literal=hcloud="${HCLOUD_TOKEN}" --from-literal=network=""
+        kubectl create secret generic hetzner \
+            --from-literal=hcloud="${HCLOUD_TOKEN}" \
 
     else
-        kubectl patch secret hetzner --patch-file <(cat <<EOF
-data:
-  hcloud: $(echo -n "${HCLOUD_TOKEN}" | base64 -w0)
-EOF
+        kubectl patch secret hetzner --patch-file <(cat <<-EOF
+        data:
+        hcloud: $(echo -n "${HCLOUD_TOKEN}" | base64 -w0)
+		EOF
     )
     fi
-    kubectl patch secret hetzner --patch '{"metadata":{"labels":{"clusterctl.cluster.x-k8s.io/move":""}}}'
+    kubectl patch secret hetzner \
+        --patch='{"metadata":{"labels":{"clusterctl.cluster.x-k8s.io/move":""}}}'
 }
 
 function workload_post_apply_hook() {
@@ -107,11 +112,11 @@ function workload_control_plane_initialized_hook() {
     local name=$1
 
     # Migrated to CAPI helm addon
+    true
 }
 
 function workload_logs() {
     local name=$1
 
-    kubectl --namespace caph-system logs deployment/caph-controller-manager \
-    >caph-controller-manager.log
+    true
 }
