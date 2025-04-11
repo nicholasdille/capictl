@@ -1,0 +1,16 @@
+apiVersion: addons.cluster.x-k8s.io/v1alpha1
+kind: HelmChartProxy
+metadata:
+  name: headlamp
+spec:
+  clusterSelector:
+    matchLabels:
+      headlampChart: enabled
+  repoURL: https://kubernetes-sigs.github.io/headlamp/
+  chartName: headlamp
+  namespace: default
+  options:
+    waitForJobs: true
+    wait: true
+    timeout: 5m
+  valuesTemplate: ""

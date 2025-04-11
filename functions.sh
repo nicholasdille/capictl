@@ -55,6 +55,7 @@ function generate_cluster_manifests() {
     yq --inplace eval 'select(.kind == "Cluster").metadata.labels.clusterApiVisualizerChart = "enabled"' cluster.yaml
     yq --inplace eval 'select(.kind == "Cluster").metadata.labels.kyvernoChart = "enabled"' cluster.yaml
     yq --inplace eval 'select(.kind == "Cluster").metadata.labels.traefikChart = "enabled"' cluster.yaml
+    yq --inplace eval 'select(.kind == "Cluster").metadata.labels.headlampChart = "enabled"' cluster.yaml
 }
 
 function apply_cluster_manifests() {
