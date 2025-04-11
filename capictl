@@ -140,19 +140,6 @@ if ! workload_precheck; then
     exit 1
 fi
 
-function github_get_rate_limit() {
-    if test -n "${GITHUB_TOKEN}"; then
-        GITHUB_TOKEN_AUTH="Authorization: token ${GITHUB_TOKEN}"
-    fi
-    curl \
-        --silent \
-        --location \
-        --fail \
-        --header "${GITHUB_TOKEN_AUTH}" \
-        --url https://api.github.com/rate_limit \
-    | jq --raw-output '.rate.remaining'
-}
-
 GH_RATE_LIMIT_LEFT="$(github_get_rate_limit)"
 if test "${GH_RATE_LIMIT_LEFT}" -lt 10; then
     echo "ERROR: GitHub rate limit too low (${GH_RATE_LIMIT_LEFT} left)"
@@ -180,14 +167,7 @@ if ! kubectl cluster-info; then
     exit 1
 fi
 
-echo "### Installing provider"
-clusterctl init \
-    --infrastructure="${INFRASTRUCTURE_PROVIDER}" \
-    --bootstrap="${BOOTSTRAP_PROVIDER}" \
-    --control-plane="${CONTROL_PLANE_PROVIDER}" \
-    --addon=helm \
-    --wait-providers \
-    --wait-provider-timeout=300
+bootstrap_cluster_init
 if ! bootstrap_post_init_hook; then
     echo "ERROR: Failed to execute post init hook"
     bootstrap_delete "${BOOTSTRAP_CLUSTER_NAME}"
@@ -198,50 +178,7 @@ while kubectl get pods -A | tail -n +2 | grep -vqE "(Running|Completed)"; do
     sleep 10
 done
 
-echo "### Generating cluster configuration"
-if test -n "${PROVIDER_TEMPLATE_FLAVOR}"; then
-    PROVIDER_TEMPLATE_FLAVOR_PARAMETER="--flavor ${PROVIDER_TEMPLATE_FLAVOR}"
-fi
-if ! ${REUSE_CLUSTER_YAML}; then
-    rm -f cluster.yaml
-fi
-if test -z HCLOUD_SSH_KEY; then
-    SSH_KEY_NAME=caph
-else
-    SSH_KEY_NAME="${HCLOUD_SSH_KEY}"
-fi
-export SSH_KEY_NAME
-if ! test -f cluster.yaml; then
-    clusterctl generate cluster "${CLUSTER_NAME}" \
-        --kubernetes-version="v${KUBERNETES_VERSION}" \
-        ${PROVIDER_TEMPLATE_FLAVOR_PARAMETER} \
-        --control-plane-machine-count="${CONTROL_PLANE_NODE_COUNT}" \
-        --worker-machine-count="${WORKER_NODE_COUNT}" \
-        >cluster.yaml
-fi
-if test -n "${IMAGE_NAME}"; then
-    sed -i -E "s/^(\s+imageName:) .+$/\1 ${IMAGE_NAME}/" cluster.yaml
-else
-    echo "ERROR: IMAGE_NAME not set"
-    exit 1
-fi
-if test -n "${POD_CIDR}"; then
-    export POD_CIDR
-    yq --inplace eval 'select(.kind == "Cluster").spec.clusterNetwork.pods.cidrBlocks |= [env(POD_CIDR)]' cluster.yaml
-fi
-if test -n "${SERVICE_CIDR}"; then
-    export SERVICE_CIDR
-    yq --inplace eval 'select(.kind == "Cluster").spec.clusterNetwork.services.cidrBlocks |= [env(SERVICE_CIDR)]' cluster.yaml
-fi
-if ${OIDC_AUTH} && test -f auth-config.yaml; then
-    yq --inplace eval 'select(.kind == "KubeadmControlPlane").spec.kubeadmConfigSpec.files |= [{"content": load(auth-config.yaml), "owner": "root:root", "path": "/etc/kubernetes/auth/auth-config.yaml", "permission": "0600}]' cluster.yaml
-    yq --inplace eval 'select(.kind == "KubeadmControlPlane").spec.kubeadmConfigSpec.clusterConfiguration.apiServer.extraArgs.authentication-config = "/etc/kubernetes/auth/auth-config.yaml"' cluster.yaml
-fi
-export CNI_PLUGIN
-yq --inplace eval 'select(.kind == "Cluster").metadata.labels.cniChart = env(CNI_PLUGIN)' cluster.yaml
-yq --inplace eval 'select(.kind == "Cluster").metadata.labels.clusterApiVisualizerChart = "enabled"' cluster.yaml
-yq --inplace eval 'select(.kind == "Cluster").metadata.labels.kyvernoChart = "enabled"' cluster.yaml
-yq --inplace eval 'select(.kind == "Cluster").metadata.labels.traefikChart = "enabled"' cluster.yaml
+generate_cluster_manifests
 workload_post_generate_hook "${CLUSTER_NAME}"
 
 if ${BREAK_AFTER_CLUSTER_TEMPLATE}; then
@@ -253,17 +190,9 @@ fi
 
 echo "### Rolling out workload cluster"
 workload_pre_apply_hook "${CLUSTER_NAME}"
-cat cluster.yaml \
-| kubectl apply -f -
-kubectl apply --filename=helm/*.yaml
+apply_cluster_manifests
 workload_post_apply_hook "${CLUSTER_NAME}"
-
-echo "### Waiting for control plane to initialize"
-if ! kubectl wait cluster ${CLUSTER_NAME} --for=condition=ControlPlaneInitialized --timeout=${TIMEOUT_IN_MINUTES}m; then
-    echo "ERROR: Control plane failed to initialize"
-    clusterctl describe cluster ${CLUSTER_NAME} --show-conditions all
-    exit 1
-fi
+wait_for_control_plane_initialized
 
 echo "### Getting kubeconfig for workload cluster ${CLUSTER_NAME}"
 touch "kubeconfig-${CLUSTER_NAME}"
@@ -279,140 +208,21 @@ if ! cni_precheck; then
 fi
 cni_deploy "${CLUSTER_NAME}"
 
-echo "### Waiting for control plane to become ready"
-if ! kubectl wait cluster "${CLUSTER_NAME}" --for=condition=Ready --timeout=${TIMEOUT_IN_MINUTES}m; then
-    echo "ERROR: Control plane failed to become ready"
-    clusterctl describe cluster "${CLUSTER_NAME}" --show-conditions=all
-    exit 1
-fi
-echo "    Controle plane ready"
-
-echo "### Waiting for control plane machines to become healthy"
-if ! kubectl wait machines --selector=cluster.x-k8s.io/control-plane-name=${CLUSTER_NAME}-control-plane --for=condition=NodeHealthy --timeout=${TIMEOUT_IN_MINUTES}m; then
-    echo "ERROR: Control plane machines failed to become healthy"
-    clusterctl describe cluster "${CLUSTER_NAME}" --show-conditions all
-    exit 1
-fi
-echo "    Control plane machines healthy"
-
-echo "### Waiting for worker nodes to become ready"
-if ! kubectl wait machinedeployment "${CLUSTER_NAME}-md-0" --for=condition=Ready  --timeout=${TIMEOUT_IN_MINUTES}m; then
-    echo "ERROR: Nodes failed to become ready"
-    clusterctl describe cluster "${CLUSTER_NAME}" --show-conditions all
-    kubectl describe machinedeployment "${CLUSTER_NAME}-md-0"
-    exit 1
-fi
-if ! kubectl --kubeconfig=kubeconfig-${CLUSTER_NAME} wait nodes --all --all-namespaces --for=condition=Ready --timeout=30m; then
-    echo "### Nodes are not ready"
-    kubectl get nodes --all-namespaces
-    exit 1
-fi
-echo "    Worker nodes are ready"
-
-echo "### Waiting for pods to become ready"
-if ! kubectl --kubeconfig=kubeconfig-${CLUSTER_NAME} wait pods --all --all-namespaces --for=condition=Ready --timeout=${TIMEOUT_IN_MINUTES}m; then
-    echo "ERROR: Pods failed to become ready"
-    kubectl get pods --all-namespaces
-    exit 1
-fi
-echo "    Pods are ready"
+wait_for_control_plane_ready
+wait_for_control_plane_nodes_healthy
+wait_for_worker_nodes_ready
+wait_for_pods_ready
 
 if ! cni_post_install_hook "${CLUSTER_NAME}"; then
     echo "ERROR: CNI provider post install hook failed"
     exit 1
 fi
 
-echo "### Fetching logs"
-kubectl --kubeconfig=kubeconfig-demo get namespace --selector=cluster.x-k8s.io/provider --output=name \
-| cut -d/ -f2 \
-| while read -r NAMESPACE; do \
-    kubectl --kubeconfig=kubeconfig-demo --namespace="${NAMESPACE}" get deployment --outout=name \
-    | cut -d/ -f2 \
-    | while read -r DEPLOYMENT; do \
-        kubectl --kubeconfig=kubeconfig-demo --namespace="${NAMESPACE}" logs "deployment/${DEPLOYMENT}" >"${DEPLOYMENT}.log"
-    done
-done
-if ! workload_logs "${CLUSTER_NAME}"; then
-    echo "ERROR: Failed to fetch logs for workload provider"
-    exit 1
-fi
+fetch_capi_provider_logs
 
-echo "### Initialize CAPH in workload cluster"
-clusterctl init \
-    --kubeconfig=kubeconfig-${CLUSTER_NAME} \
-    --infrastructure="${INFRASTRUCTURE_PROVIDER}" \
-    --bootstrap="${BOOTSTRAP_PROVIDER}" \
-    --control-plane="${CONTROL_PLANE_PROVIDER}" \
-    --addon=helm \
-    --wait-providers
+move_capi_providers
 
-echo "### Waiting for management resources to be running"
-if ! kubectl --kubeconfig=kubeconfig-${CLUSTER_NAME} wait pods --all --all-namespaces --for=condition=Ready --timeout=30m; then
-    echo "### Pods are not ready"
-    kubectl get pods --all-namespaces
-    exit 1
-fi
-echo "### Pods are ready"
-echo "### Move management resources to workload cluster"
-clusterctl move --to-kubeconfig=kubeconfig-${CLUSTER_NAME}
-
-echo "### Creating cluster admin"
-mv "kubeconfig-${CLUSTER_NAME}" "kubeconfig-${CLUSTER_NAME}-certificate"
-export KUBECONFIG="kubeconfig-${CLUSTER_NAME}-certificate"
-cat <<EOF | kubectl --namespace kube-system apply --filename=-
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: my-cluster-admin
-  namespace: kube-system
-EOF
-cat <<EOF | kubectl --namespace=kube-system apply --filename=-
-kind: ClusterRoleBinding
-apiVersion: rbac.authorization.k8s.io/v1
-metadata:
-  name: my-cluster-admin
-roleRef:
-  kind: ClusterRole
-  name: cluster-admin
-  apiGroup: rbac.authorization.k8s.io
-subjects:
-- kind: ServiceAccount
-  name: my-cluster-admin
-  namespace: kube-system
-EOF
-cat <<EOF | kubectl --namespace=kube-system apply --filename=-
-apiVersion: v1
-kind: Secret
-metadata:
-  name: my-cluster-admin-token
-  annotations:
-    kubernetes.io/service-account.name: my-cluster-admin
-type: kubernetes.io/service-account-token
-EOF
-TOKEN=$(
-    kubectl --namespace=kube-system get secrets my-cluster-admin-token --output=json \
-    | jq --raw-output '.data.token' \
-    | base64 -d
-)
-SERVER=$(
-    kubectl config view --raw --output json \
-    | jq --raw-output '.clusters[].cluster.server'
-)
-CA=$(
-    kubectl config view --raw --output json \
-    | jq --raw-output '.clusters[].cluster."certificate-authority-data"' \
-    | base64 -d
-)
-export KUBECONFIG="kubeconfig-${CLUSTER_NAME}"
-if test -f "${KUBECONFIG}"; then
-    echo "kubeconfig ${KUBECONFIG} already exists" >&2
-    exit 1
-fi
-touch "${KUBECONFIG}"
-kubectl config set-cluster default --server="${SERVER}" --certificate-authority=<(echo "${CA}") --embed-certs=true
-kubectl config set-credentials my-cluster-admin --token="${TOKEN}"
-kubectl config set-context cluster-admin --cluster=default --user=my-cluster-admin
-kubectl config use-context cluster-admin
+create_long_lived_admin_token
 
 echo "### Removing bootstrap cluster"
 bootstrap_delete "${CLUSTER_NAME}"

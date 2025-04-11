@@ -29,6 +29,7 @@ function workload_precheck() {
                 --name=caph \
                 --label=type=caph \
                 --public-key-from-file=./ssh.pub
+            SSH_KEY_NAME=caph
 
         elif test "$( jq 'length' <<<"${SSH_KEY_JSON}" )" -eq 1; then
             echo "### Use existing SSH key"
@@ -36,6 +37,7 @@ function workload_precheck() {
                 echo "ERROR: Missing ssh private key. Aborting."
                 return 1
             fi
+            SSH_KEY_NAME="${HCLOUD_SSH_KEY}"
 
         else
             echo "ERROR: No or exactly one SSH key with label type=caph is required. Aborting."
@@ -43,6 +45,7 @@ function workload_precheck() {
 
         fi
     fi
+    export SSH_KEY_NAME
     export HCLOUD_SSH_KEY
 
     : "${HCLOUD_REGION:=fsn1}"
@@ -71,11 +74,17 @@ function workload_precheck() {
             | jq --raw-output 'sort_by(.created) | .[-1] | select(.labels."caph-image-name") | .labels."caph-image-name"'
         )"
     fi
+    if test -z "${IMAGE_NAME}"; then
+        echo "ERROR: IMAGE_NAME not set"
+        exit 1
+    fi
     echo "### Using image ${IMAGE_NAME}"
 }
 
 function workload_post_generate_hook() {
     local name=$1
+
+    sed -i -E "s/^(\s+imageName:) .+$/\1 ${IMAGE_NAME}/" cluster.yaml
 
     sed -i '/pod-eviction-timeout/d' cluster.yaml
 
