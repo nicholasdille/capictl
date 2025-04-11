@@ -9,6 +9,7 @@ spec:
   repoURL: https://charts.christianhuth.de
   chartName: cluster-api-visualizer
   namespace: default
+  releaseName: cluster-api-visualizer
   options:
     waitForJobs: true
     wait: true

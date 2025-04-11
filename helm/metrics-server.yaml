@@ -9,6 +9,7 @@ spec:
   repoURL: https://kubernetes-sigs.github.io/metrics-server/
   chartName: metrics-server
   namespace: kube-system
+  releaseName: metrics-server
   options:
     waitForJobs: true
     wait: true

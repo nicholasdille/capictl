@@ -9,6 +9,7 @@ spec:
   repoURL: https://charts.syself.com
   chartName: csi-hcloud
   namespace: kube-system
+  releaseName: csi-hcloud
   options:
     waitForJobs: true
     wait: true

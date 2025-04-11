@@ -9,6 +9,7 @@ spec:
   repoURL: https://traefik.github.io/charts
   chartName: traefik
   namespace: kube-system
+  releaseName: traefik
   options:
     waitForJobs: true
     wait: true

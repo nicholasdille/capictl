@@ -9,6 +9,7 @@ spec:
   repoURL: https://kubernetes-sigs.github.io/headlamp/
   chartName: headlamp
   namespace: default
+  releaseName: headlamp
   options:
     waitForJobs: true
     wait: true

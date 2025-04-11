@@ -9,6 +9,7 @@ spec:
   repoURL: https://kyverno.github.io/kyverno/
   chartName: kyverno
   namespace: kyverno
+  releaseName: kyverno
   options:
     waitForJobs: true
     wait: true

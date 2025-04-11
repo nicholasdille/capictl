@@ -9,6 +9,7 @@ spec:
   repoURL: https://charts.syself.com
   chartName: ccm-hcloud
   namespace: kube-system
+  releaseName: ccm-hcloud
   options:
     waitForJobs: true
     wait: true
