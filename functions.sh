@@ -160,36 +160,36 @@ function create_long_lived_admin_token() {
     echo "### Creating cluster admin"
     mv "kubeconfig-${CLUSTER_NAME}" "kubeconfig-${CLUSTER_NAME}-certificate"
     export KUBECONFIG="kubeconfig-${CLUSTER_NAME}-certificate"
-    cat <<EOF | kubectl --namespace kube-system apply --filename=-
+    cat <<-EOF | kubectl --namespace kube-system apply --filename=-
     apiVersion: v1
     kind: ServiceAccount
     metadata:
-    name: my-cluster-admin
-    namespace: kube-system
-    EOF
-    cat <<EOF | kubectl --namespace=kube-system apply --filename=-
+      name: my-cluster-admin
+      namespace: kube-system
+	EOF
+    cat <<-EOF | kubectl --namespace=kube-system apply --filename=-
     kind: ClusterRoleBinding
     apiVersion: rbac.authorization.k8s.io/v1
     metadata:
-    name: my-cluster-admin
+      name: my-cluster-admin
     roleRef:
-    kind: ClusterRole
-    name: cluster-admin
-    apiGroup: rbac.authorization.k8s.io
+      kind: ClusterRole
+      name: cluster-admin
+      apiGroup: rbac.authorization.k8s.io
     subjects:
     - kind: ServiceAccount
-    name: my-cluster-admin
-    namespace: kube-system
-    EOF
-    cat <<EOF | kubectl --namespace=kube-system apply --filename=-
+      name: my-cluster-admin
+      namespace: kube-system
+	EOF
+    cat <<-EOF | kubectl --namespace=kube-system apply --filename=-
     apiVersion: v1
     kind: Secret
     metadata:
-    name: my-cluster-admin-token
-    annotations:
+      name: my-cluster-admin-token
+      annotations:
         kubernetes.io/service-account.name: my-cluster-admin
     type: kubernetes.io/service-account-token
-    EOF
+	EOF
     TOKEN=$(
         kubectl --namespace=kube-system get secrets my-cluster-admin-token --output=json \
         | jq --raw-output '.data.token' \
