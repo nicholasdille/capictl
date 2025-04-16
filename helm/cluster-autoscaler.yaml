@@ -1,0 +1,19 @@
+apiVersion: addons.cluster.x-k8s.io/v1alpha1
+kind: HelmChartProxy
+metadata:
+  name: cluster-autoscaler
+spec:
+  clusterSelector:
+    matchLabels:
+      alloyChart: enabled
+  repoURL: https://kubernetes.github.io/autoscaler
+  chartName: cluster-autoscaler
+  namespace: kube-system
+  releaseName: cluster-autoscaler
+  options:
+    waitForJobs: true
+    wait: true
+    timeout: 5m
+  valuesTemplate: |
+    autoDiscovery:
+      clusterName: CLUSTER_NAME
