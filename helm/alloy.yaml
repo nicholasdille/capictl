@@ -1,0 +1,50 @@
+apiVersion: addons.cluster.x-k8s.io/v1alpha1
+kind: HelmChartProxy
+metadata:
+  name: alloy
+spec:
+  clusterSelector:
+    matchLabels:
+      alloyChart: enabled
+  repoURL: https://grafana.github.io/helm-charts
+  chartName: alloy
+  namespace: monitoring
+  releaseName: alloy
+  options:
+    waitForJobs: true
+    wait: true
+    timeout: 5m
+    install:
+      createNamespace: true
+  valuesTemplate: |
+    # https://grafana.com/docs/alloy/latest/
+    
+    crds:
+      create: true
+
+    alloy:
+      configMap:
+        create: true
+        content: |
+          prometheus.remote_write "cluster" {
+            endpoint {
+              url = "http://prometheus-operated:9090/api/v1/write"
+            }
+          }
+          prometheus.operator.servicemonitors "<LABEL>" {
+            forward_to = [prometheus.remote_write.cluster.receiver]
+          }
+          prometheus.operator.podmonitors "<LABEL>" {
+            forward_to = [prometheus.remote_write.cluster.receiver]
+          }
+
+      clustering:
+        enabled: false
+
+      stabilityLevel: "generally-available"
+
+    serviceMonitor:
+      enabled: false
+
+    ingress:
+      enabled: false

@@ -1,0 +1,28 @@
+apiVersion: addons.cluster.x-k8s.io/v1alpha1
+kind: HelmChartProxy
+metadata:
+  name: vault
+spec:
+  clusterSelector:
+    matchLabels:
+      vaultChart: enabled
+  repoURL: https://helm.releases.hashicorp.com
+  chartName: vault
+  namespace: vault
+  releaseName: vault
+  options:
+    waitForJobs: true
+    wait: true
+    timeout: 5m
+    install:
+      createNamespace: true
+  valuesTemplate: |
+    server:
+      dev:
+        enabled: true
+    injector:
+      enabled: false
+    csi:
+      enabled: true
+    ui:
+      enabled: true

@@ -1,0 +1,54 @@
+apiVersion: addons.cluster.x-k8s.io/v1alpha1
+kind: HelmChartProxy
+metadata:
+  name: kube-prometheus-stack
+spec:
+  clusterSelector:
+    matchLabels:
+      kubePrometheusStackChart: enabled
+  repoURL: https://prometheus-community.github.io/helm-charts
+  chartName: kube-prometheus-stack
+  namespace: monitoring
+  releaseName: kube-prometheus-stack
+  options:
+    waitForJobs: true
+    wait: true
+    timeout: 5m
+    install:
+      createNamespace: true
+  valuesTemplate: |
+    crds:
+      enabled: true
+    defaultRules:
+      create: true
+    kubernetesServiceMonitors:
+      enabled: true
+    kubeApiServer:
+      enabled: true
+    kubelet:
+      enabled: true
+    kubeControllerManager:
+      enabled: true
+    coreDns:
+      enabled: true
+    kubeDns:
+      enabled: false
+    kubeEtcd:
+      enabled: true
+    kubeScheduler:
+      enabled: true
+    kubeProxy:
+      enabled: true
+
+    kubeStateMetrics:
+      enabled: true
+    nodeExporter:
+      enabled: true
+    prometheusOperator:
+      enabled: true
+    prometheus:
+      enabled: true
+    alertmanager:
+      enabled: false
+    grafana:
+      enabled: false
