@@ -17,7 +17,7 @@ spec:
   valuesTemplate: |
     service:
       annotations:
-        load-balancer.hetzner.cloud/location: {{ index .HetznerCluster.spec.controlPlaneRegions 0 }}
+        load-balancer.hetzner.cloud/location: {{ index .InfraCluster.spec.controlPlaneRegions 0 }}
     ingressRoute:
       dashboard:
         enabled: true
