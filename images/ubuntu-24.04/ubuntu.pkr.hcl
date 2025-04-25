@@ -32,7 +32,7 @@ variable "containerd_version" {
 variable "cni_version" {
   type    = string
   # renovate: datasource=github-releases depName=containernetworking/plugins extractVersion=^v(?<version>\d+\.\d+\.\d+)$
-  default = "1.6.2"
+  default = "1.7.1"
 }
 
 variable "image-name" {
